@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haunted House: Full-Window Side-Scroller Audio Designer</title>
+    <title>Haunted House: Audio Designer & Resource Evaluator</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -25,27 +25,32 @@
             overflow: hidden;
         }
 
-        /* Sidebar HUD Panels */
         #sidebar {
-            width: 320px;
+            width: 340px;
             background-color: var(--panel-color);
             border-right: 4px solid var(--wall-color);
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 15px;
             box-shadow: inset -10px 0 20px rgba(0,0,0,0.5);
-            z-index: 10;
+            z-index: 50;
         }
 
         h2 { 
-            font-size: 1.1rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; 
+            font-size: 1.1rem; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; 
             color: var(--accent-color); text-shadow: 0 0 8px rgba(0, 255, 170, 0.4); text-align: center;
             border-bottom: 2px solid var(--border-color); padding-bottom: 10px;
+        }
+
+        .stats-banner {
+            background: #090e14; border: 1px solid var(--border-color);
+            padding: 8px; text-align: center; font-weight: bold; font-size: 0.9rem;
+            margin-bottom: 15px; border-radius: 4px; color: #fff;
         }
         
         .tab-container { display: flex; gap: 5px; margin-bottom: 15px; }
         .tab {
-            flex: 1; padding: 8px 4px; font-size: 0.75rem; background: #1c2331; border: 1px solid var(--border-color);
+            flex: 1; padding: 8px 4px; font-size: 0.7rem; background: #1c2331; border: 1px solid var(--border-color);
             color: var(--text-color); cursor: pointer; text-align: center; border-radius: 4px; font-weight: bold;
         }
         .tab.active { background: #2e3b52; border-color: var(--ghost-glow); color: var(--ghost-glow); }
@@ -53,140 +58,133 @@
         #asset-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
         
         .asset-item {
-            background: #1a2230; border: 2px solid var(--border-color); padding: 12px; border-radius: 6px;
-            cursor: grab; font-size: 0.85rem; transition: all 0.2s; font-weight: bold;
-            display: flex; align-items: center; justify-content: space-between;
+            background: #1a2230; border: 2px solid var(--border-color); padding: 10px; border-radius: 6px;
+            cursor: grab; font-size: 0.8rem; transition: all 0.2s; font-weight: bold;
+            display: flex; align-items: center; justify-content: space-between; position: relative;
         }
-        .asset-item:hover { border-color: var(--accent-color); background: #222d3f; transform: scale(1.02); }
-        .asset-type-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: var(--wall-color); color: #8fa0b5; }
+        .asset-item.locked { opacity: 0.4; cursor: not-allowed; border-style: dotted; }
+        .asset-item:not(.locked):hover { border-color: var(--accent-color); background: #222d3f; transform: scale(1.01); }
+        .buy-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7);
+            display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer;
+        }
+        .buy-btn { background: #16aa6c; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 3px; }
 
         .tool-item {
             background: #251c3a; border: 2px dashed var(--ghost-glow); color: var(--ghost-glow);
             padding: 12px; border-radius: 6px; cursor: grab; font-size: 0.85rem; font-weight: bold;
-            margin-bottom: 15px; text-align: center; box-shadow: 0 0 8px rgba(0,204,255,0.2);
+            margin-bottom: 15px; text-align: center;
         }
+        .tool-item.disabled { opacity: 0.3; cursor: not-allowed; }
 
-        /* Workspace Panels */
         #workspace { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; background: #0f1319; overflow: hidden; position: relative; }
 
         #controls {
             background: var(--panel-color); border: 3px solid var(--wall-color); padding: 15px;
-            border-radius: 8px; display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.6); z-index: 20;
+            border-radius: 8px; display: flex; align-items: center; justify-content: space-between; z-index: 20;
         }
 
         .btn {
-            background: #223147; color: var(--accent-color); border: 2px solid var(--accent-color); padding: 10px 20px;
-            font-size: 0.9rem; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+            background: #223147; color: var(--accent-color); border: 2px solid var(--accent-color); padding: 10px 15px;
+            font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit;
         }
-        .btn:hover { background: var(--accent-color); color: var(--wall-color); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); }
+        .btn:hover:not(:disabled) { background: var(--accent-color); color: var(--wall-color); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: #444; color: #444; }
         .btn.testing { background: #5a1919; color: #ff6b6b; border-color: #ff6b6b; }
 
-        /* Editing Navigation Arrows */
         .nav-arrow {
             position: absolute; top: calc(50% + 20px); transform: translateY(-50%);
             background: rgba(20, 25, 31, 0.85); border: 2px solid var(--border-color); color: var(--ghost-glow);
-            width: 50px; height: 80px; font-size: 1.5rem; font-weight: bold; cursor: pointer; z-index: 30;
-            display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s;
+            width: 45px; height: 70px; font-size: 1.3rem; font-weight: bold; cursor: pointer; z-index: 40;
+            display: flex; align-items: center; justify-content: center; border-radius: 8px;
         }
-        .nav-arrow:hover { background: var(--panel-color); border-color: var(--ghost-glow); box-shadow: 0 0 15px rgba(0,204,255,0.4); }
-        #nav-left { left: 340px; }
+        #nav-left { left: 360px; }
         #nav-right { right: 20px; }
 
-        #meter-container { display: flex; align-items: center; gap: 15px; flex: 1; max-width: 350px; margin-left: 20px; }
-        #meter-bg { flex: 1; height: 24px; background: var(--wall-color); border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; }
-        #meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, #00ffaa, #e6c822, #ff3333); transition: width 0.3s ease; }
-        #meter-label { font-weight: bold; width: 45px; text-align: right; color: var(--ghost-glow); }
-        #score-stats { font-size: 0.8rem; color: #8fa0b5; font-weight: bold; }
+        #meter-container { display: flex; align-items: center; gap: 15px; flex: 1; max-width: 280px; margin-left: 20px; }
+        #meter-bg { flex: 1; height: 20px; background: var(--wall-color); border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+        #meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, #00ffaa, #e6c822, #ff3333); transition: width 0.2s ease; }
+        #meter-label { font-weight: bold; width: 45px; text-align: right; color: var(--ghost-glow); font-size: 0.85rem; }
 
-        /* Viewport Frame Window */
         #scroller-viewport {
             flex: 1; overflow-x: hidden; overflow-y: hidden; background: var(--wall-color); 
-            border: 8px solid #000; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            position: relative;
+            border: 6px solid #000; border-radius: 12px; position: relative;
         }
 
-        /* Seamless Continuous Scroll Row linking Background.png */
         #house-scroll-row {
             display: flex; width: 400%; height: 100%; padding: 0; position: relative;
-            background-image: url('Background.png');
+            transition: transform 1.2s cubic-bezier(0.25, 1, 0.5, 1);
+            background-image: url('Assets/Background.png');
             background-size: 100% 100%;
             background-repeat: no-repeat;
             left: 0;
         }
 
-        /* Individual Room Viewport Containers */
         .room {
-            width: 25%; height: 100%; border-right: 24px solid #000;
-            position: relative; display: flex; flex-direction: column; justify-content: space-between;
-            padding: 30px;
+            width: 25%; height: 100%; border-right: 20px solid #000;
+            position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 25px;
         }
-        
-        #room-0 { background: linear-gradient(to bottom, rgba(19,32,38,0.1), rgba(9,14,18,0.3)); }
-        #room-1 { background: linear-gradient(to bottom, rgba(22,38,32,0.1), rgba(10,18,14,0.3)); }
-        #room-2 { background: linear-gradient(to bottom, rgba(28,25,36,0.1), rgba(14,12,18,0.3)); }
-        #room-3 { background: linear-gradient(to bottom, rgba(18,21,28,0.1), rgba(8,10,14,0.3)); border-right: none; }
-
-        .room::after {
-            content: ''; position: absolute; bottom: 0; right: -24px; width: 24px; height: 140px;
-            background: #000; border-radius: 12px 12px 0 0; z-index: 5;
-            border-left: 2px dashed var(--border-color); border-right: 2px dashed var(--border-color);
-        }
-        #room-3::after { display: none; }
+        #room-3 { border-right: none; }
 
         .room-title { 
-            font-size: 0.85rem; color: #fff; font-weight: bold; background: rgba(0, 0, 0, 0.7); 
-            padding: 6px 12px; border-radius: 4px; border: 2px solid var(--border-color); letter-spacing: 2px;
-            align-self: flex-start; pointer-events: none; text-transform: uppercase;
+            font-size: 0.8rem; color: #fff; font-weight: bold; background: rgba(0, 0, 0, 0.7); 
+            padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border-color); letter-spacing: 1px;
+            align-self: flex-start; pointer-events: none;
         }
 
-        .speaker-slots { display: flex; gap: 15px; position: absolute; top: 30px; right: 30px; }
+        .speaker-slots { display: flex; gap: 12px; margin-top: 10px; }
         .speaker-slot {
-            width: 52px; height: 52px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 8px;
-            display: flex; align-items: center; justify-content: center; font-size: 1.3rem; cursor: pointer;
-            position: relative; transition: all 0.2s; z-index: 10;
+            width: 90px; height: 45px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center; font-size: 0.75rem; cursor: pointer;
+            position: relative; transition: all 0.2s; font-weight: bold; text-align: center; padding: 2px;
         }
-        .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; box-shadow: 0 0 12px rgba(0,204,255,0.4); }
+        .speaker-slot.slot-disabled { opacity: 0.2; cursor: not-allowed; border-color: #333; }
+        .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; }
 
-        /* Target Floor Placement Boundaries */
-        .room-floor {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 75px; z-index: 4;
-        }
+        .room-floor { position: absolute; bottom: 0; left: 0; width: 100%; height: 70px; z-index: 15; }
 
-        /* Dropped Sensor Pad - Absolute Placement */
         .dropped-sensor-pad {
-            width: 90px; height: 20px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
-            cursor: pointer; position: absolute; bottom: 0; animation: blink 2s infinite ease-in-out;
-            box-shadow: 0 -4px 12px rgba(0,255,170,0.4);
+            width: 80px; height: 16px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
+            cursor: pointer; position: absolute; bottom: 0; z-index: 16;
         }
         .dropped-sensor-pad::before {
-            content: 'SENSOR PAD'; position: absolute; top: -16px; left: 0; width: 100%;
-            font-size: 9px; text-align: center; color: var(--accent-color); font-weight: bold; letter-spacing: 1px;
+            content: 'SENSOR'; position: absolute; top: -14px; left: 0; width: 100%;
+            font-size: 8px; text-align: center; color: var(--accent-color); font-weight: bold;
         }
 
         .clear-btn {
-            position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; background: #ff3333;
-            color: white; border-radius: 50%; font-size: 11px; display: flex; align-items: center;
-            justify-content: center; font-weight: bold; cursor: pointer; border: 1px solid #000; z-index: 12; display: none;
+            position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: #ff3333;
+            color: white; border-radius: 50%; font-size: 10px; display: flex; align-items: center;
+            justify-content: center; font-weight: bold; cursor: pointer; border: 1px solid #000; display: none;
         }
         .speaker-slot.occupied:hover .clear-btn, .dropped-sensor-pad:hover .clear-btn { display: flex; }
 
-        /* Left-to-right tracking customer visitor overlay */
         #customer-avatar {
-            width: 46px; height: 70px; background: #e0ca3c; border: 3px solid #000; border-radius: 8px 8px 2px 2px;
-            position: absolute; bottom: 15px; left: 0px; z-index: 100;
-            pointer-events: none; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: none;
+            width: 46px; height: 75px; position: absolute; bottom: 15px; left: 0px; z-index: 100;
+            pointer-events: none; display: none; background-size: contain; background-repeat: no-repeat; background-position: bottom;
         }
-        #customer-avatar::before { content: '👀'; position: absolute; top: 12px; left: 0; width: 100%; text-align: center; font-size: 18px; }
 
-        @keyframes blink { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; background: #163828; } }
+        /* Modal Overlays */
+        .modal {
+            display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+            background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; padding: 20px;
+        }
+        .modal-content {
+            background:var(--panel-color); border:3px solid var(--border-color); padding: 25px; 
+            border-radius:8px; max-width:450px; width:100%; text-align:center; box-shadow: 0 0 20px rgba(0,0,0,0.6);
+        }
+        .modal-content h3 { color: var(--accent-color); margin-bottom: 12px; font-size: 1.1rem; letter-spacing: 1px; }
+        .modal-content p { font-size: 0.85rem; line-height: 1.4; color: #b4c7dc; margin-bottom: 20px; text-align: left; background: #0c1015; padding: 12px; border-radius: 4px; border-left: 3px solid var(--ghost-glow); }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h2>HUD DESIGNER</h2>
-        <div class="tool-item" id="tool-sensor" draggable="true">👣 SENSOR PAD (DRAG)</div>
+        <h2>HUD EVALUATOR</h2>
+        <div class="stats-banner">
+            BANK: £<span id="wallet-display">50</span> | RUN: <span id="run-cycle-display">Tutorial</span>
+        </div>
+        <div class="tool-item" id="tool-sensor" draggable="true">👣 SENSOR PAD</div>
         <div class="tab-container">
             <div class="tab active" onclick="filterAssets('all', this)">All</div>
             <div class="tab" onclick="filterAssets('ambient', this)">Ambient</div>
@@ -198,139 +196,161 @@
 
     <div id="workspace">
         <div id="controls">
-            <button id="test-btn" class="btn" onclick="toggleTestMode()">▶ RUN SYSTEM EVALUATION</button>
+            <button id="test-btn" class="btn" onclick="handleSystemExecution()">▶ RUN PHASE EVALUATION</button>
             <div id="meter-container">
-                <span style="font-size:0.75rem; font-weight:bold; letter-spacing:1px;">ANXIETY INDEX:</span>
+                <span style="font-size:0.7rem; font-weight:bold; letter-spacing:1px;" id="target-label">ANXIETY INDEX:</span>
                 <div id="meter-bg"><div id="meter-fill"></div></div>
                 <div id="meter-label">0%</div>
             </div>
-            <div id="score-stats">Sustained Panic: <span id="red-zone-counter">0.0</span>s</div>
+            <div id="score-stats" style="font-size:0.75rem; color:#8fa0b5; font-weight:bold;">
+                Sustained Panic: <span id="red-zone-counter">0.0</span>s<br>
+                Target Level: <span id="target-status">Young Boy</span>
+            </div>
         </div>
 
-        <!-- Manual Edit Mode Scroll Buttons -->
         <button id="nav-left" class="nav-arrow" onclick="scrollWorkspace(-1)">◀</button>
         <button id="nav-right" class="nav-arrow" onclick="scrollWorkspace(1)">▶</button>
 
         <div id="scroller-viewport">
+            <div id="customer-avatar"></div>
             <div id="house-scroll-row">
-                <div id="customer-avatar"></div>
-
-                <!-- Rooms -->
-                <div class="room" id="room-0" data-room-index="0">
-                    <span class="room-title">01: ENTRANCE HALL</span>
-                    <div class="speaker-slots">
-                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                    </div>
-                    <div class="room-floor" data-room-index="0"></div>
-                </div>
-
-                <div class="room" id="room-1" data-room-index="1">
-                    <span class="room-title">02: DREAD CORRIDOR</span>
-                    <div class="speaker-slots">
-                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                    </div>
-                    <div class="room-floor" data-room-index="1"></div>
-                </div>
-
-                <div class="room" id="room-2" data-room-index="2">
-                    <span class="room-title">03: GALLERY OF SHADOWS</span>
-                    <div class="speaker-slots">
-                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                    </div>
-                    <div class="room-floor" data-room-index="2"></div>
-                </div>
-
-                <div class="room" id="room-3" data-room-index="3">
-                    <span class="room-title">04: BASEMENT CRYPT</span>
-                    <div class="speaker-slots">
-                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                    </div>
-                    <div class="room-floor" data-room-index="3"></div>
-                </div>
+                <!-- Loop generated rooms -->
+                <script>
+                    const roomNames = ["01: ENTRANCE HALL", "02: DREAD CORRIDOR", "03: GALLERY OF SHADOWS", "04: BASEMENT CRYPT"];
+                    for(let i=0; i<4; i++) {
+                        document.write(`
+                        <div class="room" id="room-${i}" data-room-index="${i}">
+                            <span class="room-title">${roomNames[i]}</span>
+                            <div class="speaker-slots">
+                                <div class="speaker-slot" data-slot="music" id="slot-music-${i}">Music<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                                <div class="speaker-slot" data-slot="ambient" id="slot-ambient-${i}">Ambient<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                            </div>
+                            <div class="room-floor" data-room-index="${i}"></div>
+                        </div>`);
+                    }
+                </script>
             </div>
         </div>
     </div>
 
-    <!-- Drop assignment overlay prompt -->
-    <div id="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
-        <div style="background:var(--panel-color); border:3px solid var(--border-color); padding:25px; border-radius:8px; max-width:400px; width:100%; text-align:center;">
-            <h3 style="margin-bottom:15px; font-size:1rem; color:var(--ghost-glow);">LINK SFX SENSOR TARGET</h3>
-            <select id="modal-select" style="width:100%; padding:10px; background:var(--wall-color); color:#fff; border:1px solid var(--border-color); margin-bottom:20px; font-family:inherit;"></select>
+    <!-- Educational Pop-up Modal Box -->
+    <div id="edu-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">DESIGN LAB NOTE</h3>
+            <p id="modal-text"></p>
+            <button class="btn" onclick="closeModal()">ACKNOWLEDGE & CONTINUE</button>
+        </div>
+    </div>
+
+    <!-- Drop configuration context modal -->
+    <div id="sensor-modal" class="modal">
+        <div class="modal-content">
+            <h3>LINK SFX SENSOR TARGET</h3>
+            <select id="modal-select" style="width:100%; padding:10px; background:#0c1015; color:#fff; border:1px solid var(--border-color); margin-bottom:20px; font-family:inherit;"></select>
             <button class="btn" onclick="confirmSensorLink()">LINK SENSOR</button>
         </div>
     </div>
 
     <script>
         const AUDIO_ASSET_DATABASE = {
-            'chime.mp3': { name: 'Chime', category: 'ambient', path: 'Sounds/Ambient/Chime', alternativePath: 'Sounds/Ambient/chime', scareValue: 5 },
-            'demon_voice.mp3': { name: 'Demon Voice', category: 'ambient', path: 'Sounds/Ambient/demon_voice', alternativePath: 'Sounds/Ambient/Demon_Voice', scareValue: 15 },
-            'scary_ringing.mp3': { name: 'Scary Ringing', category: 'ambient', path: 'Sounds/Ambient/scary_ringing', alternativePath: 'Sounds/Ambient/Scary_Ringing', scareValue: 10 },
-            'creepy_crying.mp3': { name: 'Creepy Crying', category: 'ambient', path: 'Sounds/Ambient/creepy_crying', alternativePath: 'Sounds/Ambient/Creepy_Crying', scareValue: 20 },
-            'siren_cry.mp3': { name: 'Siren Cry', category: 'ambient', path: 'Sounds/Ambient/siren_cry', alternativePath: 'Sounds/Ambient/Siren_Cry', scareValue: 8 },
-            'monster_below.mp3': { name: 'Monster Below', category: 'ambient', path: 'Sounds/Ambient/monster_below', alternativePath: 'Sounds/Ambient/Monster_Below', scareValue: 12 },
-            
-            'save_me.mp3': { name: 'Save Me', category: 'dialogue', path: 'Sounds/Dialogue/save_me', alternativePath: 'Sounds/Dialogue/Save_Me', scareValue: 15 },
-            'i_see_you.mp3': { name: 'I See You', category: 'dialogue', path: 'Sounds/Dialogue/I_see_you', alternativePath: 'Sounds/Dialogue/i_see_you', scareValue: 18 },
-            'shadows.mp3': { name: 'Shadows', category: 'dialogue', path: 'Sounds/Dialogue/shadows', alternativePath: 'Sounds/Dialogue/Shadows', scareValue: 8 },
-            'darkness.mp3': { name: 'Darkness', category: 'dialogue', path: 'Sounds/Dialogue/darkness', alternativePath: 'Sounds/Dialogue/Darkness', scareValue: 12 },
-            
-            'scary_tune.mp3': { name: 'Scary Tune', category: 'music', path: 'Sounds/Music/scary_tune', alternativePath: 'Sounds/Music/Scary_Tune', scareValue: 15 },
-            'scary_hit.mp3': { name: 'Scary Hit', category: 'music', path: 'Sounds/Music/scary_hit', alternativePath: 'Sounds/Music/Scary_Hit', scareValue: 18 },
-            'scary_melody.mp3': { name: 'Scary Melody', category: 'music', path: 'Sounds/Music/scary_melody', alternativePath: 'Sounds/Music/Scary_Melody', scareValue: 8 },
-            'into_death.mp3': { name: 'Into Death', category: 'music', path: 'Sounds/Music/into_death', scareValue: 20 },
-            
-            'female_scream.mp3': { name: 'Female Scream', category: 'sfx', path: 'Sounds/SFX/female_scream', alternativePath: 'Sounds/SFX/Female_Scream', scareValue: 12 },
-            'howie_scream.mp3': { name: 'Howie Scream', category: 'sfx', path: 'Sounds/SFX/howie_scream', alternativePath: 'Sounds/SFX/Howie_Scream', scareValue: 18 },
-            'monster.mp3': { name: 'Monster', category: 'sfx', path: 'Sounds/SFX/monster', alternativePath: 'Sounds/SFX/Monster', scareValue: 15 },
-            'scream_male.mp3': { name: 'Scream (Male)', category: 'sfx', path: 'Sounds/SFX/scream_male', alternativePath: 'Sounds/SFX/Scream_Male', scareValue: 8 },
-            'zombie.mp3': { name: 'Zombie', category: 'sfx', path: 'Sounds/SFX/zombie', alternativePath: 'Sounds/SFX/Zombie', scareValue: 10 },
-            'zombie_2.mp3': { name: 'Zombie 2', category: 'sfx', path: 'Sounds/SFX/zombie_2', alternativePath: 'Sounds/SFX/Zombie_2', scareValue: 8 },
-            'scary_siren.mp3': { name: 'Scary Siren', category: 'sfx', path: 'Sounds/SFX/scary_siren', alternativePath: 'Sounds/SFX/Scary_Siren', scareValue: 10 },
-            'scary_hit_2.mp3': { name: 'Scary Hit 2', category: 'sfx', path: 'Sounds/SFX/scary_hit_2', alternativePath: 'Sounds/SFX/Scary_Hit_2', scareValue: 12 },
-            'scream.mp3': { name: 'Scream', category: 'sfx', path: 'Sounds/SFX/scream', alternativePath: 'Sounds/SFX/Scream', scareValue: 20 },
-            'ghoul_cry.mp3': { name: 'Ghoul Cry', category: 'sfx', path: 'Sounds/SFX/ghoul_cry', alternativePath: 'Sounds/SFX/Ghoul_Cry', scareValue: 14 }
+            'scary_tune.mp3': { name: 'Scary Tune', category: 'music', path: 'Assets/Sounds/Music/scary_tune', cost: 0, scareValue: 10, purchased: true },
+            'into_death.mp3': { name: 'Into Death', category: 'music', path: 'Assets/Sounds/Music/into_death', cost: 25, scareValue: 22, purchased: false },
+            'chime.mp3': { name: 'Chime Loop', category: 'ambient', path: 'Assets/Sounds/Ambient/chime', cost: 0, scareValue: 8, purchased: true },
+            'creepy_crying.mp3': { name: 'Creepy Crying', category: 'ambient', path: 'Assets/Sounds/Ambient/creepy_crying', cost: 30, scareValue: 25, purchased: false },
+            'zombie.mp3': { name: 'Zombie Groan', category: 'sfx', path: 'Assets/Sounds/SFX/zombie', cost: 0, scareValue: 12, purchased: true },
+            'scream.mp3': { name: 'Female Scream', category: 'sfx', path: 'Assets/Sounds/SFX/scream', cost: 40, scareValue: 30, purchased: false }
         };
 
-        let currentLevelSetup = [
-            { room: '0', ambient: null, music: null, triggers: [] },
-            { room: '1', ambient: null, music: null, triggers: [] },
-            { room: '2', ambient: null, music: null, triggers: [] },
-            { room: '3', ambient: null, music: null, triggers: [] }
+        const TUTORIAL_PHASES = ['music', 'ambient', 'sfx'];
+        let currentTutorialIndex = 0;
+        let isTutorialComplete = false;
+
+        let gameCycleMode = 'tutorial'; // 'tutorial' or 'live'
+        let currentCustomerCount = 0;
+        let currentDifficultyTier = 0; // 0: Young Boy, 1: Teenage Girl, 2: Adult Man
+        
+        const DIFFICULTY_CONFIG = [
+            { label: "Young Boy", adaptationThreshold: 35, multiplier: 1.0, baseScareRequired: 40 },
+            { label: "Teenage Girl", adaptationThreshold: 55, multiplier: 0.8, baseScareRequired: 60 },
+            { label: "Adult Man", adaptationThreshold: 75, multiplier: 0.5, baseScareRequired: 80 }
         ];
 
+        let walletBalance = 50;
         let isTesting = false;
         let activeAudioNodes = [];
         let redZoneSeconds = 0;
-        
-        let editingRoomIndex = 0; 
+        let editingRoomIndex = 0;
+        let animationFrameId = null;
+
+        let currentLevelSetup = Array.from({length: 4}, (_, i) => ({ room: i.toString(), ambient: null, music: null, triggers: [] }));
         let pendingTargetFloorIndex = null;
         let pendingDropX = 0;
-        
-        let animationFrameId = null;
-        let audioCtx = null;
 
         window.onload = () => {
+            updateHUDState();
             populateAssets();
             setupDragMechanics();
             scrollWorkspace(0);
         };
+
+        function updateHUDState() {
+            document.getElementById('wallet-display').innerText = walletBalance;
+            if(!isTutorialComplete) {
+                document.getElementById('run-cycle-display').innerText = `Tutorial (${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()})`;
+                document.getElementById('target-status').innerText = "Calibration";
+                
+                // Toggle editor restriction states based on active tutorial phase
+                for(let i=0; i<4; i++) {
+                    TUTORIAL_PHASES.forEach(phase => {
+                        let el = document.getElementById(`slot-${phase}-${i}`);
+                        if(phase === TUTORIAL_PHASES[currentTutorialIndex]) el.classList.remove('slot-disabled');
+                        else el.classList.add('slot-disabled');
+                    });
+                }
+                if(TUTORIAL_PHASES[currentTutorialIndex] === 'sfx') document.getElementById('tool-sensor').classList.remove('disabled');
+                else document.getElementById('tool-sensor').classList.add('disabled');
+            } else {
+                document.getElementById('run-cycle-display').innerText = `Live (Customer ${currentCustomerCount + 1}/3)`;
+                document.getElementById('target-status').innerText = DIFFICULTY_CONFIG[currentDifficultyTier].label;
+                document.getElementById('tool-sensor').classList.remove('disabled');
+                for(let i=0; i<4; i++) {
+                    document.getElementById(`slot-music-${i}`).classList.remove('slot-disabled');
+                    document.getElementById(`slot-ambient-${i}`).classList.remove('slot-disabled');
+                }
+            }
+        }
 
         function populateAssets() {
             const list = document.getElementById('asset-list');
             list.innerHTML = '';
             for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
                 const div = document.createElement('div');
-                div.className = 'asset-item';
+                div.className = `asset-item ${!item.purchased ? 'locked' : ''}`;
                 div.id = id;
-                div.setAttribute('draggable', 'true');
-                div.setAttribute('data-category', item.category);
-                let displayCat = item.category === 'dialogue' ? 'sfx' : item.category;
-                div.innerHTML = `<span>${item.name}</span><span class="asset-type-badge">${displayCat}</span>`;
+                if(item.purchased) div.setAttribute('draggable', 'true');
+                div.innerHTML = `<span>${item.name} (Value: ${item.scareValue})</span><span class="asset-type-badge">${item.category.toUpperCase()}</span>`;
+                
+                if(!item.purchased) {
+                    const overlay = document.createElement('div');
+                    overlay.className = 'buy-overlay';
+                    overlay.innerHTML = `<button class="buy-btn" onclick="purchaseAsset(event, '${id}')">BUY £${item.cost}</button>`;
+                    div.appendChild(overlay);
+                }
                 list.appendChild(div);
+            }
+        }
+
+        function purchaseAsset(e, id) {
+            e.stopPropagation();
+            const asset = AUDIO_ASSET_DATABASE[id];
+            if(walletBalance >= asset.cost) {
+                walletBalance -= asset.cost;
+                asset.purchased = true;
+                populateAssets();
+                updateHUDState();
+                showModal("ASSET UNLOCKED", `Functional Maths Action: Successfully processed deduction of £${asset.cost}. Balance remaining: £${walletBalance}. This sound asset is now free to use infinitely across your timeline.`);
+            } else {
+                showModal("BUDGET DEFICIT", `Insufficient funds available to purchase ${asset.name}. You require an additional £${asset.cost - walletBalance}. Run tracking cycles with your baseline tools to process more revenue.`);
             }
         }
 
@@ -338,37 +358,45 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             element.classList.add('active');
             document.querySelectorAll('.asset-item').forEach(item => {
-                const itemCat = item.getAttribute('data-category');
-                if (cat === 'all' || itemCat === cat || (cat === 'sfx' && itemCat === 'dialogue')) item.style.display = 'flex';
+                const itemCat = AUDIO_ASSET_DATABASE[item.id].category;
+                if (cat === 'all' || itemCat === cat) item.style.style.display = 'flex';
                 else item.style.display = 'none';
             });
         }
 
-        // Handle editing scroll views
         function scrollWorkspace(direction) {
             if (isTesting) return;
             editingRoomIndex = Math.max(0, Math.min(3, editingRoomIndex + direction));
-            const scrollRow = document.getElementById('house-scroll-row');
-            scrollRow.style.transform = `translateX(-${editingRoomIndex * 25}%)`;
+            document.getElementById('house-scroll-row').style.transform = `translateX(-${editingRoomIndex * 25}%)`;
         }
 
         function setupDragMechanics() {
             document.querySelectorAll('.asset-item, #tool-sensor').forEach(item => {
-                item.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', e.target.id));
+                item.addEventListener('dragstart', (e) => {
+                    if(e.target.classList.contains('locked') || e.target.classList.contains('disabled')) { e.preventDefault(); return; }
+                    e.dataTransfer.setData('text/plain', e.target.id);
+                });
             });
 
             document.querySelectorAll('.speaker-slot').forEach(slot => {
                 slot.addEventListener('dragover', (e) => e.preventDefault());
                 slot.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (isTesting) return;
-                    const id = e.dataTransfer.setData('text/plain', e.target.id);
+                    if (isTesting || slot.classList.contains('slot-disabled')) return;
+                    const id = e.dataTransfer.getData('text/plain');
                     const asset = AUDIO_ASSET_DATABASE[id];
                     if (!asset || asset.category !== slot.getAttribute('data-slot')) return;
 
                     const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
                     currentLevelSetup[roomIdx][slot.getAttribute('data-slot')] = id;
                     slot.classList.add('occupied');
+                    slot.childNodes[0].nodeValue = asset.name;
+
+                    if(!isTutorialComplete && currentTutorialIndex === 0 && asset.category === 'music') {
+                        showModal("DESIGN THEORY: MUSIC", "In game setting architecture, background music forms the emotional anchor. It shapes sub-conscious expectation and signals underlying tension before physical actions or threats materialize.");
+                    } else if(!isTutorialComplete && currentTutorialIndex === 1 && asset.category === 'ambient') {
+                        showModal("DESIGN THEORY: AMBIENT", "Ambient sounds flesh out spatial depth. Distant looping echoes, wind, and creaks convince the brain that the digital location is alive, breaking the vacuum of clean silence.");
+                    }
                 });
             });
 
@@ -376,18 +404,47 @@
                 floor.addEventListener('dragover', (e) => e.preventDefault());
                 floor.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (isTesting) return;
+                    if (isTesting || document.getElementById('tool-sensor').classList.contains('disabled')) return;
                     if (e.dataTransfer.getData('text/plain') !== 'tool-sensor') return;
 
                     pendingTargetFloorIndex = parseInt(floor.getAttribute('data-room-index'));
-                    
-                    // Capture exact relative horizontal coordinate inside room boundary
                     const rect = floor.getBoundingClientRect();
                     pendingDropX = e.clientX - rect.left;
 
-                    openSensorLinkModal();
+                    const select = document.getElementById('modal-select');
+                    select.innerHTML = '';
+                    for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
+                        if (item.category === 'sfx') {
+                            const opt = document.createElement('option'); opt.value = id; opt.innerText = item.name;
+                            select.appendChild(opt);
+                        }
+                    }
+                    document.getElementById('sensor-modal').style.display = 'flex';
                 });
             });
+        }
+
+        function confirmSensorLink() {
+            const assetId = document.getElementById('modal-select').value;
+            const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
+            
+            // Educational Rule Check: Diminishing returns pop-up tracker
+            const matchingTriggers = currentLevelSetup[pendingTargetFloorIndex].triggers.filter(t => t.assetId === assetId);
+            let tooClose = matchingTriggers.some(t => Math.abs(t.x - pendingDropX) < 120);
+            
+            if(tooClose) {
+                showModal("IMMERSION ERROR: REPETITION", "Warning! Placing identical sound effects in extreme spatial proximity breaks design realism. Customers build adaptation, dropping overall fear curves dramatically.");
+            }
+
+            const padId = 'pad-' + Date.now();
+            currentLevelSetup[pendingTargetFloorIndex].triggers.push({ id: padId, assetId: assetId, x: pendingDropX, triggered: false });
+
+            const pad = document.createElement('div');
+            pad.className = 'dropped-sensor-pad'; pad.id = padId; pad.style.left = `${pendingDropX - 40}px`;
+            pad.innerHTML = `<span class="clear-btn" onclick="clearSensor(event, '${padId}', ${pendingTargetFloorIndex})">×</span>`;
+
+            floorContainer.appendChild(pad);
+            document.getElementById('sensor-modal').style.display = 'none';
         }
 
         function clearSpeaker(e) {
@@ -397,224 +454,181 @@
             const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
             currentLevelSetup[roomIdx][slotType] = null;
             slot.classList.remove('occupied');
-        }
-
-        function openSensorLinkModal() {
-            const select = document.getElementById('modal-select');
-            select.innerHTML = '';
-            for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
-                if (item.category === 'sfx' || item.category === 'dialogue') {
-                    const opt = document.createElement('option');
-                    opt.value = id;
-                    opt.innerText = `[${item.category.toUpperCase()}] ${item.name}`;
-                    select.appendChild(opt);
-                }
-            }
-            document.getElementById('modal-overlay').style.display = 'flex';
-        }
-
-        function confirmSensorLink() {
-            const assetId = document.getElementById('modal-select').value;
-            const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
-            const padId = 'pad-' + Date.now();
-            
-            // Log target with localized relative x coordinate plot point
-            currentLevelSetup[pendingTargetFloorIndex].triggers.push({ 
-                id: padId, 
-                assetId: assetId, 
-                x: pendingDropX,
-                triggered: false 
-            });
-
-            const pad = document.createElement('div');
-            pad.className = 'dropped-sensor-pad';
-            pad.id = padId;
-            pad.style.left = `${pendingDropX - 45}px`; // Center align onto custom dropped target
-            pad.title = `Triggers: ${AUDIO_ASSET_DATABASE[assetId].name}`;
-            pad.innerHTML = `<span class="clear-btn" onclick="clearSensor(event, '${padId}', ${pendingTargetFloorIndex})">×</span>`;
-
-            floorContainer.appendChild(pad);
-            document.getElementById('modal-overlay').style.display = 'none';
+            slot.childNodes[0].nodeValue = slotType.charAt(0).toUpperCase() + slotType.slice(1);
         }
 
         function clearSensor(e, padId, roomIndex) {
-            e.stopPropagation();
-            document.getElementById(padId).remove();
+            e.stopPropagation(); document.getElementById(padId).remove();
             currentLevelSetup[roomIndex].triggers = currentLevelSetup[roomIndex].triggers.filter(t => t.id !== padId);
         }
 
-        // Live testing procedures
-        function toggleTestMode() {
-            if (isTesting) stopTest();
-            else startTest();
+        function showModal(title, text) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-text').innerText = text;
+            document.getElementById('edu-modal').style.display = 'flex';
         }
 
-        function startTest() {
-            // Unlock audio context safely
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+        function closeModal() { document.getElementById('edu-modal').style.display = 'none'; }
 
+        function handleSystemExecution() {
+            if (isTesting) stopEvaluation();
+            else startEvaluation();
+        }
+
+        function startEvaluation() {
             isTesting = true;
             redZoneSeconds = 0;
-            
-            // Clean out target trigger lock states
             currentLevelSetup.forEach(r => r.triggers.forEach(t => t.triggered = false));
 
-            document.getElementById('test-btn').innerText = '⏹ HALT EVALUATION';
+            document.getElementById('test-btn').innerText = '⏹ HALT RUN EVALUATION';
             document.getElementById('test-btn').classList.add('testing');
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'none');
 
             const avatar = document.getElementById('customer-avatar');
             avatar.style.display = 'block';
+            avatar.style.backgroundImage = "url('Assets/customer_1.png')"; // Start normal layout
 
             const scrollRow = document.getElementById('house-scroll-row');
             const viewport = document.getElementById('scroller-viewport');
-            
-            // Total physical width of layout row boundary dimensions
             const totalWidth = viewport.clientWidth * 4;
-            let currentX = 0; 
+            
+            let currentX = 0;
             let lastRoomIndex = -1;
             let lastTime = performance.now();
 
-            function updateProgress(timestamp) {
+            function runLoop(timestamp) {
                 if (!isTesting) return;
-
                 let dt = (timestamp - lastTime) / 1000;
                 lastTime = timestamp;
 
-                // Move 150 pixels per second across layout row canvas
-                currentX += 150 * dt; 
-
+                currentX += 190 * dt; // Dynamic progression movement speed tracking
                 if (currentX >= totalWidth) {
-                    stopTest();
+                    completeEvaluationRun();
                     return;
                 }
 
-                // Viewport updates dynamically tracks visitor position coordinates
                 const viewWidth = viewport.clientWidth;
                 const activeRoomIdx = Math.floor(currentX / viewWidth);
-                
-                // Track scrolling transform matrix offsetting behind avatar target
-                scrollRow.style.transform = `translateX(-${activeRoomIdx * 25}%)`;
+                scrollRow.style.transform = `translateX(-${(currentX / totalWidth) * 100}%)`;
 
-                // Handle room backgrounds execution boundaries safely
                 if (activeRoomIdx !== lastRoomIndex) {
-                    processRoomBackgrounds(activeRoomIdx);
+                    evaluateBackgroundLayering(activeRoomIdx);
                     lastRoomIndex = activeRoomIdx;
                 }
 
-                // Check relative floor trigger coordinate intersections
-                const relativeRoomX = currentX % viewWidth;
-                checkLiveTriggers(activeRoomIdx, relativeRoomX);
+                checkTriggerCollisions(activeRoomIdx, currentX % viewWidth);
 
-                // Tracking system loop updates
-                const fillWidth = parseFloat(document.getElementById('meter-fill').style.width) || 0;
-                if (fillWidth > 75) {
+                const currentAnxiety = parseFloat(document.getElementById('meter-fill').style.width) || 0;
+                
+                // Dynamic Character Sprite Swapping Module
+                if(currentAnxiety >= 75) {
+                    avatar.style.backgroundImage = "url('Assets/customer_2.png')"; // Swap instantly to panicked version
                     redZoneSeconds += dt;
                     document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
+                } else {
+                    avatar.style.backgroundImage = "url('Assets/customer_1.png')";
                 }
 
-                animationFrameId = requestAnimationFrame(updateProgress);
+                animationFrameId = requestAnimationFrame(runLoop);
             }
-
-            animationFrameId = requestAnimationFrame(updateProgress);
+            animationFrameId = requestAnimationFrame(runLoop);
         }
 
-        function processRoomBackgrounds(roomIndex) {
-            activeAudioNodes = activeAudioNodes.filter(node => {
-                if (node.dataset.type === 'ambient' || node.dataset.type === 'music') {
-                    node.pause();
-                    return false;
-                }
-                return true;
-            });
+        function evaluateBackgroundLayering(roomIndex) {
+            activeAudioNodes.forEach(n => { if(n.dataset.type !== 'trigger') n.pause(); });
+            activeAudioNodes = activeAudioNodes.filter(n => n.dataset.type === 'trigger');
 
             const config = currentLevelSetup[roomIndex];
-            let baseScareValue = 0;
-            let layeredCount = 0;
+            let rawScare = 0;
+            let layers = 0;
 
-            if (config.ambient) {
-                baseScareValue += AUDIO_ASSET_DATABASE[config.ambient].scareValue;
-                layeredCount++;
-                playAudioLine(AUDIO_ASSET_DATABASE[config.ambient], 'ambient');
-            }
-            if (config.music) {
-                baseScareValue += AUDIO_ASSET_DATABASE[config.music].scareValue;
-                layeredCount++;
-                playAudioLine(AUDIO_ASSET_DATABASE[config.music], 'music');
-            }
+            if (config.music) { rawScare += AUDIO_ASSET_DATABASE[config.music].scareValue; layers++; triggerAudioNode(AUDIO_ASSET_DATABASE[config.music], 'music'); }
+            if (config.ambient) { rawScare += AUDIO_ASSET_DATABASE[config.ambient].scareValue; layers++; triggerAudioNode(AUDIO_ASSET_DATABASE[config.ambient], 'ambient'); }
 
-            updateMeterScore(baseScareValue, layeredCount);
+            calculateFearOutput(rawScare, layers);
         }
 
-        function checkLiveTriggers(roomIndex, relativeX) {
+        function checkTriggerCollisions(roomIndex, relativeX) {
             const config = currentLevelSetup[roomIndex];
-            
             config.triggers.forEach(trigger => {
-                // If player crosses the pad's horizontal coordinates, fire trigger
                 if (!trigger.triggered && Math.abs(relativeX - trigger.x) < 25) {
                     trigger.triggered = true;
+                    triggerAudioNode(AUDIO_ASSET_DATABASE[trigger.assetId], 'trigger');
                     
-                    playAudioLine(AUDIO_ASSET_DATABASE[trigger.assetId], 'trigger');
-                    
-                    // Increment scare score spikes dynamically
-                    let currentFill = parseFloat(document.getElementById('meter-fill').style.width) || 0;
-                    let baseCount = (config.ambient ? 1 : 0) + (config.music ? 1 : 0) + 1;
-                    let totalRaw = (config.ambient ? AUDIO_ASSET_DATABASE[config.ambient].scareValue : 0) +
-                                   (config.music ? AUDIO_ASSET_DATABASE[config.music].scareValue : 0) + 
+                    let layers = (config.music ? 1 : 0) + (config.ambient ? 1 : 0) + 1;
+                    let rawScare = (config.music ? AUDIO_ASSET_DATABASE[config.music].scareValue : 0) +
+                                   (config.ambient ? AUDIO_ASSET_DATABASE[config.ambient].scareValue : 0) +
                                    AUDIO_ASSET_DATABASE[trigger.assetId].scareValue;
-                                   
-                    updateMeterScore(totalRaw, baseCount);
+
+                    calculateFearOutput(rawScare, layers);
                 }
             });
         }
 
-        function updateMeterScore(rawScore, count) {
-            let multiplier = 1.0;
-            if (count === 2) multiplier = 1.3;
-            if (count >= 3) multiplier = 1.7;
-
-            let finalOutput = Math.min(Math.round(rawScore * multiplier), 100);
-            document.getElementById('meter-fill').style.width = `${finalOutput}%`;
-            document.getElementById('meter-label').innerText = `${finalOutput}%`;
-        }
-
-        function playAudioLine(assetObject, type) {
+        function triggerAudioNode(asset, type) {
             const audio = new Audio();
+            audio.src = asset.path + '.mp3';
             audio.dataset.type = type;
-            if (type === 'ambient' || type === 'music') audio.loop = true;
-            
-            audio.src = assetObject.path + '.mp3';
-            
-            audio.play().catch(err => {
-                // Fallback attempt for alternative casing rules
-                audio.src = assetObject.alternativePath + '.mp3';
-                audio.play().catch(finalErr => console.error("Audio block failure context paths matching: " + assetObject.path));
-            });
-            
+            if(type !== 'trigger') audio.loop = true;
+            audio.play().catch(() => console.log("Audio node playback choked by security rules. Use GitHub Pages host to authorize safely."));
             activeAudioNodes.push(audio);
         }
 
-        function stopTest() {
+        function calculateFearOutput(raw, layers) {
+            let mod = 1.0;
+            if(layers === 2) mod = 1.3;
+            if(layers >= 3) mod = 1.6;
+
+            let targetDifficulty = DIFFICULTY_CONFIG[currentDifficultyTier];
+            let processedFear = Math.min(Math.round((raw * mod) * (isTutorialComplete ? targetDifficulty.multiplier : 1.0)), 100);
+
+            document.getElementById('meter-fill').style.width = `${processedFear}%`;
+            document.getElementById('meter-label').innerText = `${processedFear}%`;
+        }
+
+        function completeEvaluationRun() {
+            stopEvaluation();
+
+            if (!isTutorialComplete) {
+                currentTutorialIndex++;
+                if (currentTutorialIndex >= TUTORIAL_PHASES.length) {
+                    isTutorialComplete = true;
+                    gameCycleMode = 'live';
+                    showModal("TRAINING EVALUATION COMPLETE", "Excellent job, Chris. Your setup has verified basic operation across Music, Ambience, and Sensor SFX parameters. You are now entering Live Evaluation with active resource management.");
+                } else {
+                    showModal("PHASE PASSED", `Baseline parameters verified. Progression unlocked for your next tutorial focus: ${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()}`);
+                }
+            } else {
+                // Live Cycle Mechanics: Basic Functional Maths Payout processing module
+                let payloadEarnings = Math.round(redZoneSeconds * 2.5); // Earn £2.50 per second spent sustained in panic zone
+                walletBalance += payloadEarnings;
+                currentCustomerCount++;
+
+                showModal("EVALUATION INCOME STATEMENT", `Customer Run Complete.\n\nTime in Panic Red Zone: ${redZoneSeconds.toFixed(1)}s\nRevenue Generated: £${payloadEarnings}\nNew Wallet Balance: £${walletBalance}`);
+
+                if(currentCustomerCount >= 3) {
+                    currentCustomerCount = 0;
+                    currentDifficultyTier = Math.min(DIFFICULTY_CONFIG.length - 1, currentDifficultyTier + 1);
+                    showModal("DIFFICULTY SCALING INCREASED", `Haunted House prestige level increased! Your next visitors match profile type: ${DIFFICULTY_CONFIG[currentDifficultyTier].label.toUpperCase()}. Their fear adaptations are higher, making them harder to panic.`);
+                }
+            }
+            updateHUDState();
+        }
+
+        function stopEvaluation() {
             isTesting = false;
             cancelAnimationFrame(animationFrameId);
-            
-            document.getElementById('test-btn').innerText = '▶ RUN SYSTEM EVALUATION';
+            document.getElementById('test-btn').innerText = '▶ RUN PHASE EVALUATION';
             document.getElementById('test-btn').classList.remove('testing');
             document.getElementById('customer-avatar').style.display = 'none';
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'flex');
             
-            // Snap back to editing coordinates view room
-            scrollWorkspace(0);
-            
-            activeAudioNodes.forEach(audio => {
-                audio.pause();
-                audio.src = '';
-            });
+            activeAudioNodes.forEach(n => { n.pause(); n.src = ''; });
             activeAudioNodes = [];
 
             document.getElementById('meter-fill').style.width = '0%';
             document.getElementById('meter-label').innerText = '0%';
+            scrollWorkspace(0);
         }
     </script>
 </body>
