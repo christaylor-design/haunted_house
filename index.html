@@ -106,11 +106,6 @@
         #nav-left { left: 20px; }
         #nav-right { right: 20px; }
 
-        #meter-container { display: flex; align-items: center; gap: 15px; flex: 1; max-width: 280px; margin-left: 20px; }
-        #meter-bg { flex: 1; height: 20px; background: var(--wall-color); border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; }
-        #meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, #00ffaa, #e6c822, #ff3333); transition: width 0.2s ease; }
-        #meter-label { font-weight: bold; width: 45px; text-align: right; color: var(--ghost-glow); font-size: 0.85rem; }
-
         #scroller-viewport {
             flex: 1; overflow-x: hidden; overflow-y: hidden; background: var(--wall-color); 
             border: 6px solid #000; border-radius: 12px; position: relative;
@@ -266,13 +261,14 @@
     </div>
 
     <script>
+        // Mapped explicit file extensions to match your repository layout verbatim
         const AUDIO_ASSET_DATABASE = {
-            'scary_tune': { name: 'Scary Tune', category: 'music', path: 'Assets/Sounds/Music/scary_tune', cost: 0, scareValue: 10, purchased: true },
-            'into_death': { name: 'Into Death', category: 'music', path: 'Assets/Sounds/Music/into_death', cost: 25, scareValue: 22, purchased: false },
-            'chime': { name: 'Chime Loop', category: 'ambient', path: 'Assets/Sounds/Ambient/chime', cost: 0, scareValue: 8, purchased: true },
-            'creepy_crying': { name: 'Creepy Crying', category: 'ambient', path: 'Assets/Sounds/Ambient/creepy_crying', cost: 30, scareValue: 25, purchased: false },
-            'zombie': { name: 'Zombie Groan', category: 'sfx', path: 'Assets/Sounds/SFX/zombie', cost: 0, scareValue: 12, purchased: true },
-            'scream': { name: 'Female Scream', category: 'sfx', path: 'Assets/Sounds/SFX/scream', cost: 40, scareValue: 30, purchased: false }
+            'scary_tune': { name: 'Scary Tune', category: 'music', path: 'Assets/Sounds/Music/scary_tune', ext: '.wav', cost: 0, scareValue: 10, purchased: true },
+            'into_death': { name: 'Into Death', category: 'music', path: 'Assets/Sounds/Music/into_death', ext: '.mp3', cost: 25, scareValue: 22, purchased: false },
+            'chime': { name: 'Chime Loop', category: 'ambient', path: 'Assets/Sounds/Ambient/chime', ext: '.wav', cost: 0, scareValue: 8, purchased: true },
+            'creepy_crying': { name: 'Creepy Crying', category: 'ambient', path: 'Assets/Sounds/Ambient/creepy_crying', ext: '.wav', cost: 30, scareValue: 25, purchased: false },
+            'zombie': { name: 'Zombie Groan', category: 'sfx', path: 'Assets/Sounds/SFX/zombie', ext: '.wav', cost: 0, scareValue: 12, purchased: true },
+            'scream': { name: 'Female Scream', category: 'sfx', path: 'Assets/Sounds/SFX/female_scream', ext: '.wav', cost: 40, scareValue: 30, purchased: false }
         };
 
         const TUTORIAL_PHASES = ['music', 'ambient', 'sfx'];
@@ -440,6 +436,13 @@
         function handleFloorClick(e, roomIndex) {
             if (isTesting || document.getElementById(`floor-${roomIndex}`).classList.contains('floor-disabled') || !isSensorToolActive) return;
             
+            if (currentLevelSetup[roomIndex].triggers.length >= 4) {
+                showModal("ROOM LIMIT REACHED", "Resource Constraint: Each zone can only support a maximum of 4 active floor pads. Distribute your tools strategically across the entire timeline.");
+                isSensorToolActive = false;
+                document.getElementById('tool-sensor').classList.remove('selected');
+                return;
+            }
+
             pendingTargetFloorIndex = roomIndex;
             const rect = document.getElementById(`floor-${roomIndex}`).getBoundingClientRect();
             pendingDropX = e.clientX - rect.left;
@@ -495,20 +498,18 @@
             if (previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
             const asset = AUDIO_ASSET_DATABASE[id];
             
-            previewAudioNode = new Audio(asset.path + '.wav'); 
+            previewAudioNode = new Audio(asset.path + asset.ext); 
             let fallbackCounter = 0;
             
             previewAudioNode.onerror = function() {
                 fallbackCounter++;
                 if(fallbackCounter === 1) {
-                    previewAudioNode.src = asset.path + '.WAV'; 
-                } else if(fallbackCounter === 2) {
-                    previewAudioNode.src = asset.path.toLowerCase() + '.wav'; 
+                    previewAudioNode.src = asset.path + asset.ext.toUpperCase(); 
                 }
             };
             
             previewAudioNode.play().catch(function() {
-                console.log("Audio file format loading safely isolated.");
+                console.log("Audio preview failed loading.");
             });
         }
 
@@ -586,14 +587,11 @@
             document.getElementById('test-btn').classList.add('testing');
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'none');
 
-            // Force hard camera reset back to Room 1 instantly on initialization
+            // Complete Layout Linear Reset: Force everything back to room index 0 smoothly
             editingRoomIndex = 0;
             const scrollRow = document.getElementById('house-scroll-row');
-            scrollRow.style.transition = 'none'; // Instant jump bypassing smooth easing transitions
+            scrollRow.style.transition = 'transform 0.2s linear';
             scrollRow.style.transform = 'translateX(0%)';
-            
-            // Re-enable CSS transitions smoothly for the animation cycle loop step
-            setTimeout(() => { scrollRow.style.transition = 'transform 1.2s cubic-bezier(0.25, 1, 0.5, 1)'; }, 50);
 
             const avatar = document.getElementById('customer-avatar');
             avatar.style.display = 'block';
@@ -608,42 +606,47 @@
             let lastRoomIndex = -1;
             let lastTime = performance.now();
 
-            function runLoop(timestamp) {
-                if (!isTesting) return;
-                let dt = (timestamp - lastTime) / 1000;
-                lastTime = timestamp;
-
-                currentX += 190 * dt; 
-                if (currentX >= totalWidth) {
-                    completeEvaluationRun();
-                    return;
-                }
-
-                const activeRoomIdx = Math.floor(currentX / viewWidth);
+            // Delay actual character walking cycle until row transform finishes jumping back to origin point
+            setTimeout(() => {
+                if(!isTesting) return;
                 
-                avatar.style.left = `${currentX}px`;
-                scrollRow.style.transform = `translateX(-${(currentX / totalWidth) * 100}%)`;
+                function runLoop(timestamp) {
+                    if (!isTesting) return;
+                    let dt = (timestamp - lastTime) / 1000;
+                    lastTime = timestamp;
 
-                if (activeRoomIdx !== lastRoomIndex) {
-                    evaluateBackgroundLayering(activeRoomIdx);
-                    lastRoomIndex = activeRoomIdx;
+                    currentX += 190 * dt; 
+                    if (currentX >= totalWidth) {
+                        completeEvaluationRun();
+                        return;
+                    }
+
+                    const activeRoomIdx = Math.floor(currentX / viewWidth);
+                    
+                    avatar.style.left = `${currentX}px`;
+                    scrollRow.style.transform = `translateX(-${(currentX / totalWidth) * 100}%)`;
+
+                    if (activeRoomIdx !== lastRoomIndex) {
+                        evaluateBackgroundLayering(activeRoomIdx);
+                        lastRoomIndex = activeRoomIdx;
+                    }
+
+                    checkTriggerCollisions(activeRoomIdx, currentX % viewWidth);
+
+                    const currentAnxiety = parseFloat(document.getElementById('meter-fill').style.width) || 0;
+                    
+                    if(currentAnxiety >= 75) {
+                        avatar.style.backgroundImage = "url('Assets/customer_2.png')"; 
+                        redZoneSeconds += dt;
+                        document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
+                    } else {
+                        avatar.style.backgroundImage = "url('Assets/customer_1.png')";
+                    }
+
+                    animationFrameId = requestAnimationFrame(runLoop);
                 }
-
-                checkTriggerCollisions(activeRoomIdx, currentX % viewWidth);
-
-                const currentAnxiety = parseFloat(document.getElementById('meter-fill').style.width) || 0;
-                
-                if(currentAnxiety >= 75) {
-                    avatar.style.backgroundImage = "url('Assets/customer_2.png')"; 
-                    redZoneSeconds += dt;
-                    document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
-                } else {
-                    avatar.style.backgroundImage = "url('Assets/customer_1.png')";
-                }
-
                 animationFrameId = requestAnimationFrame(runLoop);
-            }
-            animationFrameId = requestAnimationFrame(runLoop);
+            }, 250);
         }
 
         function evaluateBackgroundLayering(roomIndex) {
@@ -679,15 +682,14 @@
 
         function triggerAudioNode(asset, type) {
             const audio = new Audio();
-            audio.src = asset.path + '.wav'; 
+            audio.src = asset.path + asset.ext; 
             audio.dataset.type = type;
             if(type !== 'trigger') audio.loop = true;
             
             let currentErrCount = 0;
             audio.onerror = function() {
                 currentErrCount++;
-                if(currentErrCount === 1) audio.src = asset.path + '.WAV';
-                else if(currentErrCount === 2) audio.src = asset.path.toLowerCase() + '.wav';
+                if(currentErrCount === 1) audio.src = asset.path + asset.ext.toUpperCase();
             };
             
             audio.play().catch(() => console.log("Timeline audio chunk processed."));
@@ -737,6 +739,10 @@
         function stopEvaluation() {
             isTesting = false;
             cancelAnimationFrame(animationFrameId);
+            
+            const scrollRow = document.getElementById('house-scroll-row');
+            scrollRow.style.transition = 'transform 1.2s cubic-bezier(0.25, 1, 0.5, 1)';
+            
             document.getElementById('test-btn').innerText = '▶ RUN DESIGN CALIBRATION';
             document.getElementById('test-btn').classList.remove('testing');
             document.getElementById('customer-avatar').style.display = 'none';
