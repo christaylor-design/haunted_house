@@ -146,8 +146,22 @@
         .speaker-slot.slot-disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; background: rgba(0,0,0,0.2); }
         .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; color: #fff; }
 
-        .room-floor { position: absolute; bottom: 0; left: 0; width: 100%; height: 70px; z-index: 15; }
-        .room-floor.floor-disabled { cursor: not-allowed; }
+        /* Added visual guide borders and drop tracking anchors to floor regions */
+        .room-floor { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 50px; 
+            z-index: 15;
+            border-top: 2px dashed transparent;
+            transition: all 0.2s ease;
+        }
+        .room-floor.floor-highlight {
+            border-top: 2px dashed rgba(0, 255, 170, 0.4);
+            background: rgba(0, 255, 170, 0.02);
+        }
+        .room-floor.floor-disabled { cursor: not-allowed; border-top-color: transparent !important; background: transparent !important; }
 
         .dropped-sensor-pad {
             width: 80px; height: 16px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
@@ -320,7 +334,6 @@
                 document.getElementById('target-status').innerText = "Calibration Setup";
                 document.getElementById('test-btn').innerText = "▶ RUN DESIGN CALIBRATION";
                 
-                // Cumulative Locking Logic: Unlocks rows step-by-step while maintaining existing assets
                 for(let i=0; i<4; i++) {
                     let mSlot = document.getElementById(`slot-music-${i}`);
                     let aSlot = document.getElementById(`slot-ambient-${i}`);
@@ -331,13 +344,15 @@
                         aSlot.classList.add('slot-disabled');
                         floor.classList.add('floor-disabled');
                     } else if (currentPhase === 'ambient') {
-                        mSlot.classList.add('slot-disabled'); // Lock music box editing
-                        aSlot.classList.remove('slot-disabled'); // Unlock ambient editing
+                        mSlot.classList.add('slot-disabled'); 
+                        aSlot.classList.remove('slot-disabled'); 
                         floor.classList.add('floor-disabled');
                     } else if (currentPhase === 'sfx') {
                         mSlot.classList.add('slot-disabled');
                         aSlot.classList.add('slot-disabled');
-                        floor.classList.remove('floor-disabled'); // Unlock floor sensors
+                        // Expose visual guides specifically when active floor placement runs
+                        floor.classList.remove('floor-disabled'); 
+                        floor.classList.add('floor-highlight');
                     }
                 }
                 
@@ -352,7 +367,9 @@
                 for(let i=0; i<4; i++) {
                     document.getElementById(`slot-music-${i}`).classList.remove('slot-disabled');
                     document.getElementById(`slot-ambient-${i}`).classList.remove('slot-disabled');
-                    document.getElementById(`floor-${i}`).classList.remove('floor-disabled');
+                    let floor = document.getElementById(`floor-${i}`);
+                    floor.classList.remove('floor-disabled');
+                    floor.classList.add('floor-highlight');
                 }
             }
             populateAssets();
@@ -449,6 +466,9 @@
             select.innerHTML = '';
             for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
                 if (item.category === 'sfx') {
+                    // Safety Filter: Filter out locked premium assets from dropdown options during tutorial runs
+                    if (!isTutorialComplete && item.cost > 0) continue; 
+                    
                     const opt = document.createElement('option'); opt.value = id; opt.innerText = item.name;
                     select.appendChild(opt);
                 }
@@ -507,7 +527,7 @@
             };
             
             previewAudioNode.play().catch(function() {
-                console.log("Audio file preview loading safely isolated.");
+                console.log("Audio preview failed loading.");
             });
         }
 
@@ -603,6 +623,7 @@
             let currentX = 0;
             let lastRoomIndex = -1;
             let lastTime = performance.now();
+            let isCurrentlyScared = false; // State cache flags to block avatar source flickering loops
 
             setTimeout(() => {
                 if(!isTesting) return;
@@ -633,11 +654,17 @@
                     const currentAnxiety = parseFloat(document.getElementById('meter-fill').style.width) || 0;
                     
                     if(currentAnxiety >= 75) {
-                        avatar.style.backgroundImage = "url('Assets/customer_2.png')"; 
+                        if (!isCurrentlyScared) {
+                            avatar.style.backgroundImage = "url('Assets/customer_2.png')";
+                            isCurrentlyScared = true;
+                        }
                         redZoneSeconds += dt;
                         document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
                     } else {
-                        avatar.style.backgroundImage = "url('Assets/customer_1.png')";
+                        if (isCurrentlyScared) {
+                            avatar.style.backgroundImage = "url('Assets/customer_1.png')";
+                            isCurrentlyScared = false;
+                        }
                     }
 
                     animationFrameId = requestAnimationFrame(runLoop);
@@ -679,15 +706,14 @@
 
         function triggerAudioNode(asset, type) {
             const audio = new Audio();
-            audio.src = asset.path + '.wav'; 
+            audio.src = asset.path + asset.ext; 
             audio.dataset.type = type;
             if(type !== 'trigger') audio.loop = true;
             
             let currentErrCount = 0;
             audio.onerror = function() {
                 currentErrCount++;
-                if(currentErrCount === 1) audio.src = asset.path + '.WAV';
-                else if(currentErrCount === 2) audio.src = asset.path.toLowerCase() + '.wav';
+                if(currentErrCount === 1) audio.src = asset.path + asset.ext.toUpperCase();
             };
             
             audio.play().catch(() => console.log("Timeline audio chunk processed."));
@@ -702,7 +728,6 @@
             let targetDifficulty = DIFFICULTY_CONFIG[currentDifficultyTier];
             let processedFear = Math.min(Math.round((raw * mod) * (isTutorialComplete ? targetDifficulty.multiplier : 1.0)), 100);
 
-            // Directly inject and trigger visual animation fills across the UI meter components
             document.getElementById('meter-fill').style.width = `${processedFear}%`;
             document.getElementById('meter-label').innerText = `${processedFear}%`;
         }
