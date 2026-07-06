@@ -63,7 +63,7 @@
             display: flex; align-items: center; justify-content: space-between; position: relative;
             user-select: none;
         }
-        .asset-item.selected { border-color: var(--ghost-glow); background: #1a3547; box-shadow: 0 0 10px rgba(0, 204, 255, 0.3); }
+        .asset-item.selected { border-color: var(--ghost-glow) !important; background: #1a3547 !important; }
         .asset-item.locked { opacity: 0.4; cursor: not-allowed; border-style: dotted; }
         
         .buy-overlay {
@@ -77,8 +77,9 @@
             background: #251c3a; border: 2px dashed var(--ghost-glow); color: var(--ghost-glow);
             padding: 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
             margin-bottom: 15px; text-align: center;
+            user-select: none;
         }
-        .tool-item.selected { background: #3d2d5a; border-style: solid; box-shadow: 0 0 10px rgba(0, 204, 255, 0.4); }
+        .tool-item.selected { background: #3d2d5a !important; border-style: solid !important; box-shadow: 0 0 10px rgba(0, 204, 255, 0.4); }
         .tool-item.disabled { opacity: 0.3; cursor: not-allowed; border-color: #444; color: #444; }
 
         #workspace { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; background: #0f1319; overflow: hidden; position: relative; }
@@ -176,6 +177,8 @@
             background-repeat: no-repeat !important; 
             background-position: bottom !important;
             pointer-events: none;
+            background-color: transparent;
+            border: 2px dashed var(--accent-color);
         }
 
         .modal {
@@ -199,7 +202,7 @@
         <div class="stats-banner">
             BANK: £<span id="wallet-display">50</span> | MODE: <span id="run-cycle-display">Tutorial</span>
         </div>
-        <div class="tool-item" id="tool-sensor" onclick="selectSidebarTool('tool-sensor')">👣 SENSOR PAD</div>
+        <div class="tool-item" id="tool-sensor" onclick="selectSidebarTool()">👣 SENSOR PAD</div>
         <div class="tab-container">
             <div class="tab active" onclick="filterAssets('all', this)">All</div>
             <div class="tab" onclick="filterAssets('ambient', this)">Ambient</div>
@@ -236,8 +239,8 @@
                         <div class="room" id="room-${i}" data-room-index="${i}">
                             <span class="room-title">${roomNames[i]}</span>
                             <div class="speaker-slots">
-                                <div class="speaker-slot" data-slot="music" id="slot-music-${i}" onclick="handleBoxClick(this, 'music', ${i})">Music<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
-                                <div class="speaker-slot" data-slot="ambient" id="slot-ambient-${i}" onclick="handleBoxClick(this, 'ambient', ${i})">Ambient<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                                <div class="speaker-slot" data-slot="music" id="slot-music-${i}" onclick="handleBoxClick(this, 'music', ${i})">Music<span class="clear-btn" onclick="clearSpeaker(event, ${i}, 'music')">×</span></div>
+                                <div class="speaker-slot" data-slot="ambient" id="slot-ambient-${i}" onclick="handleBoxClick(this, 'ambient', ${i})">Ambient<span class="clear-btn" onclick="clearSpeaker(event, ${i}, 'ambient')">×</span></div>
                             </div>
                             <div class="room-floor" id="floor-${i}" data-room-index="${i}" onclick="handleFloorClick(event, ${i})"></div>
                         </div>`);
@@ -264,7 +267,7 @@
     </div>
 
     <script>
-        // Folder paths updated to precisely match case-sensitive GitHub structural roots
+        // Native file extensions switched strictly to .wav file formats
         const AUDIO_ASSET_DATABASE = {
             'scary_tune': { name: 'Scary Tune', category: 'music', path: 'Assets/Sounds/Music/scary_tune', cost: 0, scareValue: 10, purchased: true },
             'into_death': { name: 'Into Death', category: 'music', path: 'Assets/Sounds/Music/into_death', cost: 25, scareValue: 22, purchased: false },
@@ -301,8 +304,8 @@
         let pendingDropX = 0;
         let activeCategoryFilter = 'all';
         
-        // Selection tracking variable to bypass Drag-and-Drop inconsistencies
         let selectedSidebarAssetId = null; 
+        let isSensorToolActive = false;
 
         window.onload = () => {
             updateHUDState();
@@ -312,7 +315,6 @@
 
         function updateHUDState() {
             document.getElementById('wallet-display').innerText = walletBalance;
-            selectedSidebarAssetId = null;
             
             if(!isTutorialComplete) {
                 const currentPhase = TUTORIAL_PHASES[currentTutorialIndex];
@@ -354,7 +356,6 @@
                     document.getElementById(`floor-${i}`).classList.remove('floor-disabled');
                 }
             }
-            document.getElementById('tool-sensor').classList.remove('selected');
             populateAssets();
         }
 
@@ -376,8 +377,7 @@
                 
                 if(item.purchased) {
                     div.setAttribute('draggable', 'true');
-                    // Multi-functional handler: triggers preview AND readies item for box placement
-                    div.onclick = () => selectSidebarAsset(id);
+                    div.onclick = function() { selectSidebarAsset(this.id); };
                 }
                 div.innerHTML = `<div><span>${item.name} (Value: ${item.scareValue})</span>${item.purchased ? '<span class="preview-indicator">Listen</span>' : ''}</div><span class="asset-type-badge">${item.category.toUpperCase()}</span>`;
                 
@@ -389,48 +389,33 @@
                 }
                 list.appendChild(div);
             }
-            
-            // Explicit level-target drag bindings to insulate payload from dropping out
-            document.querySelectorAll('.asset-item').forEach(item => {
-                item.addEventListener('dragstart', (e) => {
-                    if(item.classList.contains('locked') || isTesting) { e.preventDefault(); return; }
-                    selectedSidebarAssetId = item.id;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', item.id);
-                });
-            });
         }
 
         function selectSidebarAsset(id) {
             if (isTesting) return;
+            isSensorToolActive = false;
             document.getElementById('tool-sensor').classList.remove('selected');
             
-            // Toggle selection state
             if (selectedSidebarAssetId === id) {
                 selectedSidebarAssetId = null;
                 if(previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
             } else {
                 selectedSidebarAssetId = id;
-                // Immediate Preview Execution
-                if (previewAudioNode) previewAudioNode.pause();
-                const asset = AUDIO_ASSET_DATABASE[id];
-                previewAudioNode = new Audio(asset.path + '.mp3');
-                previewAudioNode.play().catch(() => console.log("Audio target context enabled."));
+                executeSafeAudioPlayback(id);
             }
             populateAssets();
         }
 
-        function selectSidebarTool(toolId) {
-            if (isTesting || document.getElementById(toolId).classList.contains('disabled')) return;
+        function selectSidebarTool() {
+            if (isTesting || document.getElementById('tool-sensor').classList.contains('disabled')) return;
             selectedSidebarAssetId = null;
             if (previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
             
-            const tool = document.getElementById(toolId);
-            tool.classList.toggle('selected');
-            populateAssets();
+            isSensorToolActive = !isSensorToolActive;
+            if(isSensorToolActive) document.getElementById('tool-sensor').classList.add('selected');
+            else document.getElementById('tool-sensor').classList.remove('selected');
         }
 
-        // Click-To-Place Speaker Box Processing Router
         function handleBoxClick(slot, type, roomIndex) {
             if (isTesting || slot.classList.contains('slot-hidden')) return;
             
@@ -439,9 +424,8 @@
                 if (asset && asset.category === type) {
                     currentLevelSetup[roomIndex][type] = selectedSidebarAssetId;
                     slot.classList.add('occupied');
-                    slot.childNodes[0].nodeValue = asset.name;
+                    slot.innerHTML = `${asset.name}<span class="clear-btn" onclick="clearSpeaker(event, ${roomIndex}, '${type}')">×</span>`;
                     
-                    // Clear state once safely mapped
                     selectedSidebarAssetId = null;
                     if(previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
                     updateHUDState();
@@ -455,27 +439,96 @@
             }
         }
 
-        // Click-To-Place Sensor Pad Router
         function handleFloorClick(e, roomIndex) {
-            if (isTesting || document.getElementById(`floor-${roomIndex}`).classList.contains('floor-disabled')) return;
+            if (isTesting || document.getElementById(`floor-${roomIndex}`).classList.contains('floor-disabled') || !isSensorToolActive) return;
             
-            const isToolSelected = document.getElementById('tool-sensor').classList.contains('selected');
-            if (isToolSelected) {
-                pendingTargetFloorIndex = roomIndex;
-                const rect = document.getElementById(`floor-${roomIndex}`).getBoundingClientRect();
-                pendingDropX = e.clientX - rect.left;
+            pendingTargetFloorIndex = roomIndex;
+            const rect = document.getElementById(`floor-${roomIndex}`).getBoundingClientRect();
+            pendingDropX = e.clientX - rect.left;
 
-                const select = document.getElementById('modal-select');
-                select.innerHTML = '';
-                for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
-                    if (item.category === 'sfx') {
-                        const opt = document.createElement('option'); opt.value = id; opt.innerText = item.name;
-                        select.appendChild(opt);
+            const select = document.getElementById('modal-select');
+            select.innerHTML = '';
+            for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
+                if (item.category === 'sfx') {
+                    const opt = document.createElement('option'); opt.value = id; opt.innerText = item.name;
+                    select.appendChild(opt);
+                }
+            }
+            isSensorToolActive = false;
+            document.getElementById('tool-sensor').classList.remove('selected');
+            document.getElementById('sensor-modal').style.display = 'flex';
+        }
+
+        function setupDragMechanics() {
+            document.addEventListener('dragstart', function(e) {
+                if(isTesting) { e.preventDefault(); return; }
+                if(e.target.id === 'tool-sensor') {
+                    e.dataTransfer.setData('text/plain', 'tool-sensor');
+                } else {
+                    const item = e.target.closest('.asset-item');
+                    if(item && !item.classList.contains('locked')) {
+                        selectedSidebarAssetId = item.id;
+                        e.dataTransfer.setData('text/plain', item.id);
                     }
                 }
-                document.getElementById('tool-sensor').classList.remove('selected');
-                document.getElementById('sensor-modal').style.display = 'flex';
-            }
+            });
+
+            document.querySelectorAll('.speaker-slot').forEach(slot => {
+                slot.addEventListener('dragover', (e) => e.preventDefault());
+                slot.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if(isTesting || slot.classList.contains('slot-hidden')) return;
+                    const id = e.dataTransfer.getData('text/plain') || selectedSidebarAssetId;
+                    const asset = AUDIO_ASSET_DATABASE[id];
+                    if(!asset || asset.category !== slot.getAttribute('data-slot')) return;
+
+                    const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
+                    const type = slot.getAttribute('data-slot');
+                    currentLevelSetup[roomIdx][type] = id;
+                    slot.classList.add('occupied');
+                    slot.innerHTML = `${asset.name}<span class="clear-btn" onclick="clearSpeaker(event, ${roomIdx}, '${type}')">×</span>`;
+                    selectedSidebarAssetId = null;
+                    updateHUDState();
+                });
+            });
+        }
+
+        // Re-engineered audio execution parser map explicitly executing on case-flexible .wav extensions
+        function executeSafeAudioPlayback(id) {
+            if (previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
+            const asset = AUDIO_ASSET_DATABASE[id];
+            
+            previewAudioNode = new Audio(asset.path + '.wav'); // Changed directly to .wav tracking bounds
+            let fallbackCounter = 0;
+            
+            previewAudioNode.onerror = function() {
+                fallbackCounter++;
+                if(fallbackCounter === 1) {
+                    previewAudioNode.src = asset.path + '.WAV'; // Fallback 1: Uppercase extension
+                } else if(fallbackCounter === 2) {
+                    previewAudioNode.src = asset.path.toLowerCase() + '.wav'; // Fallback 2: Direct local root mirror strings
+                }
+            };
+            
+            previewAudioNode.play().catch(function() {
+                console.log("Audio file format loading safely isolated.");
+            });
+        }
+
+        function confirmSensorLink() {
+            const assetId = document.getElementById('modal-select').value;
+            const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
+            
+            const padId = 'pad-' + Date.now();
+            currentLevelSetup[pendingTargetFloorIndex].triggers.push({ id: padId, assetId: assetId, x: pendingDropX, triggered: false });
+
+            const pad = document.createElement('div');
+            pad.className = 'dropped-sensor-pad'; pad.id = padId; pad.style.left = `${pendingDropX - 40}px`;
+            pad.innerHTML = `<span class="clear-btn" onclick="clearSensor(event, '${padId}', ${pendingTargetFloorIndex})">×</span>`;
+
+            floorContainer.appendChild(pad);
+            document.getElementById('sensor-modal').style.display = 'none';
+            updateHUDState();
         }
 
         function purchaseAsset(e, id) {
@@ -484,11 +537,7 @@
             if(walletBalance >= asset.cost) {
                 walletBalance -= asset.cost;
                 asset.purchased = true;
-                populateAssets();
                 updateHUDState();
-                showModal("ASSET UNLOCKED", `Functional Maths Action: Deduction of £${asset.cost} processed. Balance remaining: £${walletBalance}.`);
-            } else {
-                showModal("BUDGET DEFICIT", `Insufficient funds available to purchase ${asset.name}. You require an additional £${asset.cost - walletBalance}.`);
             }
         }
 
@@ -505,87 +554,10 @@
             document.getElementById('house-scroll-row').style.transform = `translateX(-${editingRoomIndex * 25}%)`;
         }
 
-        function setupDragMechanics() {
-            document.getElementById('tool-sensor').addEventListener('dragstart', (e) => {
-                if(e.currentTarget.classList.contains('disabled') || isTesting) { e.preventDefault(); return; }
-                e.dataTransfer.setData('text/plain', 'tool-sensor');
-            });
-
-            document.querySelectorAll('.speaker-slot').forEach(slot => {
-                slot.addEventListener('dragover', (e) => e.preventDefault());
-                slot.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    if (isTesting || slot.classList.contains('slot-hidden')) return;
-                    
-                    const id = e.dataTransfer.getData('text/plain') || selectedSidebarAssetId;
-                    const asset = AUDIO_ASSET_DATABASE[id];
-                    if (!asset || asset.category !== slot.getAttribute('data-slot')) return;
-
-                    const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
-                    currentLevelSetup[roomIdx][slot.getAttribute('data-slot')] = id;
-                    slot.classList.add('occupied');
-                    slot.childNodes[0].nodeValue = asset.name;
-                    
-                    selectedSidebarAssetId = null;
-                    updateHUDState();
-                });
-            });
-
-            document.querySelectorAll('.room-floor').forEach(floor => {
-                floor.addEventListener('dragover', (e) => e.preventDefault());
-                floor.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    const incomingPayload = e.dataTransfer.getData('text/plain');
-                    if (isTesting || floor.classList.contains('floor-disabled') || incomingPayload !== 'tool-sensor') return;
-
-                    pendingTargetFloorIndex = parseInt(floor.getAttribute('data-room-index'));
-                    const rect = floor.getBoundingClientRect();
-                    pendingDropX = e.clientX - rect.left;
-
-                    const select = document.getElementById('modal-select');
-                    select.innerHTML = '';
-                    for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
-                        if (item.category === 'sfx') {
-                            const opt = document.createElement('option'); opt.value = id; opt.innerText = item.name;
-                            select.appendChild(opt);
-                        }
-                    }
-                    document.getElementById('sensor-modal').style.display = 'flex';
-                });
-            });
-        }
-
-        function confirmSensorLink() {
-            const assetId = document.getElementById('modal-select').value;
-            const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
-            
-            const matchingTriggers = currentLevelSetup[pendingTargetFloorIndex].triggers.filter(t => t.assetId === assetId);
-            let tooClose = matchingTriggers.some(t => Math.abs(t.x - pendingDropX) < 120);
-            
-            if(tooClose) {
-                showModal("IMMERSION ERROR: REPETITION", "Warning! Placing identical sound effects too close together reduces effectiveness. Customers build adaptation, dropping overall effectiveness curves.");
-            }
-
-            const padId = 'pad-' + Date.now();
-            currentLevelSetup[pendingTargetFloorIndex].triggers.push({ id: padId, assetId: assetId, x: pendingDropX, triggered: false });
-
-            const pad = document.createElement('div');
-            pad.className = 'dropped-sensor-pad'; pad.id = padId; pad.style.left = `${pendingDropX - 40}px`;
-            pad.innerHTML = `<span class="clear-btn" onclick="clearSensor(event, '${padId}', ${pendingTargetFloorIndex})">×</span>`;
-
-            floorContainer.appendChild(pad);
-            document.getElementById('sensor-modal').style.display = 'none';
-            updateHUDState();
-        }
-
-        function clearSpeaker(e) {
+        function clearSpeaker(e, roomIndex, type) {
             e.stopPropagation();
-            const slot = e.target.closest('.speaker-slot');
-            const slotType = slot.getAttribute('data-slot');
-            const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
-            currentLevelSetup[roomIdx][slotType] = null;
-            slot.classList.remove('occupied');
-            slot.childNodes[0].nodeValue = slotType.charAt(0).toUpperCase() + slotType.slice(1);
+            currentLevelSetup[roomIndex][type] = null;
+            updateHUDState();
         }
 
         function clearSensor(e, padId, roomIndex) {
@@ -617,11 +589,11 @@
             document.getElementById('test-btn').classList.add('testing');
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'none');
 
-            // Force alignment container rules to protect layout positioning
             const avatar = document.getElementById('customer-avatar');
             avatar.style.display = 'block';
             avatar.style.left = '0px';
             avatar.style.backgroundImage = "url('Assets/customer_1.png')"; 
+            avatar.innerText = "CUSTOMER"; 
 
             const scrollRow = document.getElementById('house-scroll-row');
             const viewport = document.getElementById('scroller-viewport');
@@ -645,7 +617,6 @@
                 const viewWidth = viewport.clientWidth;
                 const activeRoomIdx = Math.floor(currentX / viewWidth);
                 
-                // Track customer position directly relative to current viewport offset scroll metrics
                 avatar.style.left = `${currentX}px`;
                 scrollRow.style.transform = `translateX(-${(currentX / totalWidth) * 100}%)`;
 
@@ -704,10 +675,18 @@
 
         function triggerAudioNode(asset, type) {
             const audio = new Audio();
-            audio.src = asset.path + '.mp3';
+            audio.src = asset.path + '.wav'; // Implemented direct native .wav parsing engine channels
             audio.dataset.type = type;
             if(type !== 'trigger') audio.loop = true;
-            audio.play().catch(() => console.log("Audio contextual block handled."));
+            
+            let currentErrCount = 0;
+            audio.onerror = function() {
+                currentErrCount++;
+                if(currentErrCount === 1) audio.src = asset.path + '.WAV';
+                else if(currentErrCount === 2) audio.src = asset.path.toLowerCase() + '.wav';
+            };
+            
+            audio.play().catch(() => console.log("Audio chunk processed."));
             activeAudioNodes.push(audio);
         }
 
