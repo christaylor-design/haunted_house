@@ -75,7 +75,7 @@
             padding: 12px; border-radius: 6px; cursor: grab; font-size: 0.85rem; font-weight: bold;
             margin-bottom: 15px; text-align: center;
         }
-        .tool-item.disabled { opacity: 0.3; cursor: not-allowed; }
+        .tool-item.disabled { opacity: 0.3; cursor: not-allowed; border-color: #444; color: #444; }
 
         #workspace { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; background: #0f1319; overflow: hidden; position: relative; }
 
@@ -132,16 +132,17 @@
             align-self: flex-start; pointer-events: none;
         }
 
-        .speaker-slots { display: flex; gap: 12px; margin-top: 10px; }
+        .speaker-slots { display: flex; gap: 12px; margin-top: 10px; min-height: 50px; }
         .speaker-slot {
-            width: 95px; height: 45px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 6px;
+            width: 105px; height: 45px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 6px;
             display: flex; align-items: center; justify-content: center; font-size: 0.75rem; cursor: pointer;
             position: relative; transition: all 0.2s; font-weight: bold; text-align: center; padding: 2px;
         }
-        .speaker-slot.slot-disabled { opacity: 0.2; cursor: not-allowed; border-color: #333; }
+        .speaker-slot.slot-hidden { display: none !important; }
         .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; }
 
         .room-floor { position: absolute; bottom: 0; left: 0; width: 100%; height: 70px; z-index: 15; }
+        .room-floor.floor-disabled { cursor: not-allowed; }
 
         .dropped-sensor-pad {
             width: 80px; height: 16px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
@@ -159,9 +160,19 @@
         }
         .speaker-slot.occupied:hover .clear-btn, .dropped-sensor-pad:hover .clear-btn { display: flex; }
 
+        /* Customer avatar scale boosted to 250% */
         #customer-avatar {
-            width: 92px; height: 150px; position: absolute; bottom: 15px; left: 0px; z-index: 100;
-            pointer-events: none; display: none; background-size: contain; background-repeat: no-repeat; background-position: bottom;
+            width: 150px; 
+            height: 240px; 
+            position: absolute; 
+            bottom: 15px; 
+            left: 0px; 
+            z-index: 100;
+            pointer-events: none; 
+            display: none; 
+            background-size: contain; 
+            background-repeat: no-repeat; 
+            background-position: bottom;
         }
 
         .modal {
@@ -181,7 +192,7 @@
     <div id="sidebar">
         <h2>HUD EVALUATOR</h2>
         <div class="stats-banner">
-            BANK: £<span id="wallet-display">50</span> | RUN: <span id="run-cycle-display">Tutorial</span>
+            BANK: £<span id="wallet-display">50</span> | MODE: <span id="run-cycle-display">Tutorial</span>
         </div>
         <div class="tool-item" id="tool-sensor" draggable="true">👣 SENSOR PAD</div>
         <div class="tab-container">
@@ -195,7 +206,7 @@
 
     <div id="workspace">
         <div id="controls">
-            <button id="test-btn" class="btn" onclick="handleSystemExecution()">▶ RUN PHASE EVALUATION</button>
+            <button id="test-btn" class="btn" onclick="handleSystemExecution()">▶ RUN DESIGN CALIBRATION</button>
             <div id="meter-container">
                 <span style="font-size:0.7rem; font-weight:bold; letter-spacing:1px;" id="target-label">ANXIETY INDEX:</span>
                 <div id="meter-bg"><div id="meter-fill"></div></div>
@@ -223,7 +234,7 @@
                                 <div class="speaker-slot" data-slot="music" id="slot-music-${i}">Music<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
                                 <div class="speaker-slot" data-slot="ambient" id="slot-ambient-${i}">Ambient<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
                             </div>
-                            <div class="room-floor" data-room-index="${i}"></div>
+                            <div class="room-floor" id="floor-${i}" data-room-index="${i}"></div>
                         </div>`);
                     }
                 </script>
@@ -291,26 +302,47 @@
 
         function updateHUDState() {
             document.getElementById('wallet-display').innerText = walletBalance;
+            
             if(!isTutorialComplete) {
-                document.getElementById('run-cycle-display').innerText = `Tutorial (${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()})`;
-                document.getElementById('target-status').innerText = "Calibration";
+                const currentPhase = TUTORIAL_PHASES[currentTutorialIndex];
+                document.getElementById('run-cycle-display').innerText = `Tutorial (${currentPhase.toUpperCase()})`;
+                document.getElementById('target-status').innerText = "Calibration Setup";
+                document.getElementById('test-btn').innerText = "▶ RUN DESIGN CALIBRATION";
                 
+                // Pure Dynamic Separation: Restructuring layouts relative to active phase
                 for(let i=0; i<4; i++) {
-                    TUTORIAL_PHASES.forEach(phase => {
-                        let el = document.getElementById(`slot-${phase}-${i}`);
-                        if(phase === TUTORIAL_PHASES[currentTutorialIndex]) el.classList.remove('slot-disabled');
-                        else el.classList.add('slot-disabled');
-                    });
+                    let mSlot = document.getElementById(`slot-music-${i}`);
+                    let aSlot = document.getElementById(`slot-ambient-${i}`);
+                    let floor = document.getElementById(`floor-${i}`);
+                    
+                    if (currentPhase === 'music') {
+                        mSlot.classList.remove('slot-hidden');
+                        aSlot.classList.add('slot-hidden');
+                        floor.classList.add('floor-disabled');
+                    } else if (currentPhase === 'ambient') {
+                        mSlot.classList.add('slot-hidden');
+                        aSlot.classList.remove('slot-hidden');
+                        floor.classList.add('floor-disabled');
+                    } else if (currentPhase === 'sfx') {
+                        mSlot.classList.add('slot-hidden');
+                        aSlot.classList.add('slot-hidden');
+                        floor.classList.remove('floor-disabled');
+                    }
                 }
-                if(TUTORIAL_PHASES[currentTutorialIndex] === 'sfx') document.getElementById('tool-sensor').classList.remove('disabled');
+                
+                if(currentPhase === 'sfx') document.getElementById('tool-sensor').classList.remove('disabled');
                 else document.getElementById('tool-sensor').classList.add('disabled');
             } else {
-                document.getElementById('run-cycle-display').innerText = `Live (Customer ${currentCustomerCount + 1}/3)`;
+                document.getElementById('run-cycle-display').innerText = `Live Game (Customer ${currentCustomerCount + 1}/3)`;
                 document.getElementById('target-status').innerText = DIFFICULTY_CONFIG[currentDifficultyTier].label;
+                document.getElementById('test-btn').innerText = "▶ RUN CUSTOMER SCENARIO";
                 document.getElementById('tool-sensor').classList.remove('disabled');
+                
+                // Expose every single interaction anchor point inside Live game modes
                 for(let i=0; i<4; i++) {
-                    document.getElementById(`slot-music-${i}`).classList.remove('slot-disabled');
-                    document.getElementById(`slot-ambient-${i}`).classList.remove('slot-disabled');
+                    document.getElementById(`slot-music-${i}`).classList.remove('slot-hidden');
+                    document.getElementById(`slot-ambient-${i}`).classList.remove('slot-hidden');
+                    document.getElementById(`floor-${i}`).classList.remove('floor-disabled');
                 }
             }
             populateAssets();
@@ -321,8 +353,7 @@
             list.innerHTML = '';
             for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
                 if (!isTutorialComplete) {
-                    const currentRequiredCategory = TUTORIAL_PHASES[currentTutorialIndex];
-                    if (item.category !== currentRequiredCategory || item.cost > 0) {
+                    if (item.category !== TUTORIAL_PHASES[currentTutorialIndex] || item.cost > 0) {
                         continue; 
                     }
                 } else if (activeCategoryFilter !== 'all' && item.category !== activeCategoryFilter) {
@@ -344,10 +375,11 @@
                 list.appendChild(div);
             }
             
+            // Re-apply binding listeners to prevent item attachment blocks
             document.querySelectorAll('.asset-item').forEach(item => {
                 item.addEventListener('dragstart', (e) => {
-                    if(e.target.classList.contains('locked')) { e.preventDefault(); return; }
-                    e.dataTransfer.setData('text/plain', e.target.id);
+                    if(item.classList.contains('locked')) { e.preventDefault(); return; }
+                    e.dataTransfer.setData('text', e.currentTarget.id);
                 });
             });
         }
@@ -381,16 +413,17 @@
 
         function setupDragMechanics() {
             document.getElementById('tool-sensor').addEventListener('dragstart', (e) => {
-                if(e.target.classList.contains('disabled')) { e.preventDefault(); return; }
-                e.dataTransfer.setData('text/plain', e.target.id);
+                if(e.currentTarget.classList.contains('disabled')) { e.preventDefault(); return; }
+                e.dataTransfer.setData('text', e.currentTarget.id);
             });
 
             document.querySelectorAll('.speaker-slot').forEach(slot => {
                 slot.addEventListener('dragover', (e) => e.preventDefault());
                 slot.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (isTesting || slot.classList.contains('slot-disabled')) return;
-                    const id = e.dataTransfer.getData('text/plain');
+                    if (isTesting || slot.classList.contains('slot-hidden')) return;
+                    
+                    const id = e.dataTransfer.getData('text');
                     const asset = AUDIO_ASSET_DATABASE[id];
                     if (!asset || asset.category !== slot.getAttribute('data-slot')) return;
 
@@ -411,8 +444,8 @@
                 floor.addEventListener('dragover', (e) => e.preventDefault());
                 floor.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (isTesting || document.getElementById('tool-sensor').classList.contains('disabled')) return;
-                    if (e.dataTransfer.getData('text/plain') !== 'tool-sensor') return;
+                    if (isTesting || floor.classList.contains('floor-disabled')) return;
+                    if (e.dataTransfer.getData('text') !== 'tool-sensor') return;
 
                     pendingTargetFloorIndex = parseInt(floor.getAttribute('data-room-index'));
                     const rect = floor.getBoundingClientRect();
@@ -622,7 +655,7 @@
         function stopEvaluation() {
             isTesting = false;
             cancelAnimationFrame(animationFrameId);
-            document.getElementById('test-btn').innerText = '▶ RUN PHASE EVALUATION';
+            document.getElementById('test-btn').innerText = '▶ RUN DESIGN CALIBRATION';
             document.getElementById('test-btn').classList.remove('testing');
             document.getElementById('customer-avatar').style.display = 'none';
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'flex');
