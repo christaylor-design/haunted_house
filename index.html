@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haunted House: Full-Window Side-Scroller Audio Designer</title>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-color: #14191f;
+            --border-color: #243447;
+            --text-color: #d1f4ff;
+            --accent-color: #00ffaa;
+            --ghost-glow: #00ccff;
+            --wall-color: #08080a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar HUD Panels */
+        #sidebar {
+            width: 320px;
+            background-color: var(--panel-color);
+            border-right: 4px solid var(--wall-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: inset -10px 0 20px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        h2 { 
+            font-size: 1.1rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; 
+            color: var(--accent-color); text-shadow: 0 0 8px rgba(0, 255, 170, 0.4); text-align: center;
+            border-bottom: 2px solid var(--border-color); padding-bottom: 10px;
+        }
+        
+        .tab-container { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab {
+            flex: 1; padding: 8px 4px; font-size: 0.75rem; background: #1c2331; border: 1px solid var(--border-color);
+            color: var(--text-color); cursor: pointer; text-align: center; border-radius: 4px; font-weight: bold;
+        }
+        .tab.active { background: #2e3b52; border-color: var(--ghost-glow); color: var(--ghost-glow); }
+
+        #asset-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        
+        .asset-item {
+            background: #1a2230; border: 2px solid var(--border-color); padding: 12px; border-radius: 6px;
+            cursor: grab; font-size: 0.85rem; transition: all 0.2s; font-weight: bold;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .asset-item:hover { border-color: var(--accent-color); background: #222d3f; transform: scale(1.02); }
+        .asset-type-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: var(--wall-color); color: #8fa0b5; }
+
+        .tool-item {
+            background: #251c3a; border: 2px dashed var(--ghost-glow); color: var(--ghost-glow);
+            padding: 12px; border-radius: 6px; cursor: grab; font-size: 0.85rem; font-weight: bold;
+            margin-bottom: 15px; text-align: center; box-shadow: 0 0 8px rgba(0,204,255,0.2);
+        }
+
+        /* Workspace Panels */
+        #workspace { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; background: #0f1319; overflow: hidden; position: relative; }
+
+        #controls {
+            background: var(--panel-color); border: 3px solid var(--wall-color); padding: 15px;
+            border-radius: 8px; display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); z-index: 20;
+        }
+
+        .btn {
+            background: #223147; color: var(--accent-color); border: 2px solid var(--accent-color); padding: 10px 20px;
+            font-size: 0.9rem; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+        }
+        .btn:hover { background: var(--accent-color); color: var(--wall-color); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); }
+        .btn.testing { background: #5a1919; color: #ff6b6b; border-color: #ff6b6b; }
+
+        /* Editing Navigation Arrows */
+        .nav-arrow {
+            position: absolute; top: calc(50% + 20px); transform: translateY(-50%);
+            background: rgba(20, 25, 31, 0.85); border: 2px solid var(--border-color); color: var(--ghost-glow);
+            width: 50px; height: 80px; font-size: 1.5rem; font-weight: bold; cursor: pointer; z-index: 30;
+            display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s;
+        }
+        .nav-arrow:hover { background: var(--panel-color); border-color: var(--ghost-glow); box-shadow: 0 0 15px rgba(0,204,255,0.4); }
+        #nav-left { left: 340px; }
+        #nav-right { right: 20px; }
+
+        #meter-container { display: flex; align-items: center; gap: 15px; flex: 1; max-width: 350px; margin-left: 20px; }
+        #meter-bg { flex: 1; height: 24px; background: var(--wall-color); border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+        #meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, #00ffaa, #e6c822, #ff3333); transition: width 0.3s ease; }
+        #meter-label { font-weight: bold; width: 45px; text-align: right; color: var(--ghost-glow); }
+        #score-stats { font-size: 0.8rem; color: #8fa0b5; font-weight: bold; }
+
+        /* Viewport Frame Window */
+        #scroller-viewport {
+            flex: 1; overflow-x: hidden; overflow-y: hidden; background: var(--wall-color); 
+            border: 8px solid #000; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        /* Seamless Continuous Scroll Row linking Background.png */
+        #house-scroll-row {
+            display: flex; width: 400%; height: 100%; padding: 0; position: relative;
+            background-image: url('Background.png');
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            left: 0;
+        }
+
+        /* Individual Room Viewport Containers */
+        .room {
+            width: 25%; height: 100%; border-right: 24px solid #000;
+            position: relative; display: flex; flex-direction: column; justify-content: space-between;
+            padding: 30px;
+        }
+        
+        #room-0 { background: linear-gradient(to bottom, rgba(19,32,38,0.1), rgba(9,14,18,0.3)); }
+        #room-1 { background: linear-gradient(to bottom, rgba(22,38,32,0.1), rgba(10,18,14,0.3)); }
+        #room-2 { background: linear-gradient(to bottom, rgba(28,25,36,0.1), rgba(14,12,18,0.3)); }
+        #room-3 { background: linear-gradient(to bottom, rgba(18,21,28,0.1), rgba(8,10,14,0.3)); border-right: none; }
+
+        .room::after {
+            content: ''; position: absolute; bottom: 0; right: -24px; width: 24px; height: 140px;
+            background: #000; border-radius: 12px 12px 0 0; z-index: 5;
+            border-left: 2px dashed var(--border-color); border-right: 2px dashed var(--border-color);
+        }
+        #room-3::after { display: none; }
+
+        .room-title { 
+            font-size: 0.85rem; color: #fff; font-weight: bold; background: rgba(0, 0, 0, 0.7); 
+            padding: 6px 12px; border-radius: 4px; border: 2px solid var(--border-color); letter-spacing: 2px;
+            align-self: flex-start; pointer-events: none; text-transform: uppercase;
+        }
+
+        .speaker-slots { display: flex; gap: 15px; position: absolute; top: 30px; right: 30px; }
+        .speaker-slot {
+            width: 52px; height: 52px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.3rem; cursor: pointer;
+            position: relative; transition: all 0.2s; z-index: 10;
+        }
+        .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; box-shadow: 0 0 12px rgba(0,204,255,0.4); }
+
+        /* Target Floor Placement Boundaries */
+        .room-floor {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 75px; z-index: 4;
+        }
+
+        /* Dropped Sensor Pad - Absolute Placement */
+        .dropped-sensor-pad {
+            width: 90px; height: 20px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
+            cursor: pointer; position: absolute; bottom: 0; animation: blink 2s infinite ease-in-out;
+            box-shadow: 0 -4px 12px rgba(0,255,170,0.4);
+        }
+        .dropped-sensor-pad::before {
+            content: 'SENSOR PAD'; position: absolute; top: -16px; left: 0; width: 100%;
+            font-size: 9px; text-align: center; color: var(--accent-color); font-weight: bold; letter-spacing: 1px;
+        }
+
+        .clear-btn {
+            position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; background: #ff3333;
+            color: white; border-radius: 50%; font-size: 11px; display: flex; align-items: center;
+            justify-content: center; font-weight: bold; cursor: pointer; border: 1px solid #000; z-index: 12; display: none;
+        }
+        .speaker-slot.occupied:hover .clear-btn, .dropped-sensor-pad:hover .clear-btn { display: flex; }
+
+        /* Left-to-right tracking customer visitor overlay */
+        #customer-avatar {
+            width: 46px; height: 70px; background: #e0ca3c; border: 3px solid #000; border-radius: 8px 8px 2px 2px;
+            position: absolute; bottom: 15px; left: 0px; z-index: 100;
+            pointer-events: none; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: none;
+        }
+        #customer-avatar::before { content: '👀'; position: absolute; top: 12px; left: 0; width: 100%; text-align: center; font-size: 18px; }
+
+        @keyframes blink { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; background: #163828; } }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>HUD DESIGNER</h2>
+        <div class="tool-item" id="tool-sensor" draggable="true">👣 SENSOR PAD (DRAG)</div>
+        <div class="tab-container">
+            <div class="tab active" onclick="filterAssets('all', this)">All</div>
+            <div class="tab" onclick="filterAssets('ambient', this)">Ambient</div>
+            <div class="tab" onclick="filterAssets('music', this)">Music</div>
+            <div class="tab" onclick="filterAssets('sfx', this)">SFX</div>
+        </div>
+        <div id="asset-list"></div>
+    </div>
+
+    <div id="workspace">
+        <div id="controls">
+            <button id="test-btn" class="btn" onclick="toggleTestMode()">▶ RUN SYSTEM EVALUATION</button>
+            <div id="meter-container">
+                <span style="font-size:0.75rem; font-weight:bold; letter-spacing:1px;">ANXIETY INDEX:</span>
+                <div id="meter-bg"><div id="meter-fill"></div></div>
+                <div id="meter-label">0%</div>
+            </div>
+            <div id="score-stats">Sustained Panic: <span id="red-zone-counter">0.0</span>s</div>
+        </div>
+
+        <!-- Manual Edit Mode Scroll Buttons -->
+        <button id="nav-left" class="nav-arrow" onclick="scrollWorkspace(-1)">◀</button>
+        <button id="nav-right" class="nav-arrow" onclick="scrollWorkspace(1)">▶</button>
+
+        <div id="scroller-viewport">
+            <div id="house-scroll-row">
+                <div id="customer-avatar"></div>
+
+                <!-- Rooms -->
+                <div class="room" id="room-0" data-room-index="0">
+                    <span class="room-title">01: ENTRANCE HALL</span>
+                    <div class="speaker-slots">
+                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                    </div>
+                    <div class="room-floor" data-room-index="0"></div>
+                </div>
+
+                <div class="room" id="room-1" data-room-index="1">
+                    <span class="room-title">02: DREAD CORRIDOR</span>
+                    <div class="speaker-slots">
+                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                    </div>
+                    <div class="room-floor" data-room-index="1"></div>
+                </div>
+
+                <div class="room" id="room-2" data-room-index="2">
+                    <span class="room-title">03: GALLERY OF SHADOWS</span>
+                    <div class="speaker-slots">
+                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                    </div>
+                    <div class="room-floor" data-room-index="2"></div>
+                </div>
+
+                <div class="room" id="room-3" data-room-index="3">
+                    <span class="room-title">04: BASEMENT CRYPT</span>
+                    <div class="speaker-slots">
+                        <div class="speaker-slot" data-slot="ambient" title="Drop Ambient Layer">📻<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                        <div class="speaker-slot" data-slot="music" title="Drop Music Layer">🎵<span class="clear-btn" onclick="clearSpeaker(event)">×</span></div>
+                    </div>
+                    <div class="room-floor" data-room-index="3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drop assignment overlay prompt -->
+    <div id="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:var(--panel-color); border:3px solid var(--border-color); padding:25px; border-radius:8px; max-width:400px; width:100%; text-align:center;">
+            <h3 style="margin-bottom:15px; font-size:1rem; color:var(--ghost-glow);">LINK SFX SENSOR TARGET</h3>
+            <select id="modal-select" style="width:100%; padding:10px; background:var(--wall-color); color:#fff; border:1px solid var(--border-color); margin-bottom:20px; font-family:inherit;"></select>
+            <button class="btn" onclick="confirmSensorLink()">LINK SENSOR</button>
+        </div>
+    </div>
+
+    <script>
+        const AUDIO_ASSET_DATABASE = {
+            'chime.mp3': { name: 'Chime', category: 'ambient', path: 'Sounds/Ambient/Chime', alternativePath: 'Sounds/Ambient/chime', scareValue: 5 },
+            'demon_voice.mp3': { name: 'Demon Voice', category: 'ambient', path: 'Sounds/Ambient/demon_voice', alternativePath: 'Sounds/Ambient/Demon_Voice', scareValue: 15 },
+            'scary_ringing.mp3': { name: 'Scary Ringing', category: 'ambient', path: 'Sounds/Ambient/scary_ringing', alternativePath: 'Sounds/Ambient/Scary_Ringing', scareValue: 10 },
+            'creepy_crying.mp3': { name: 'Creepy Crying', category: 'ambient', path: 'Sounds/Ambient/creepy_crying', alternativePath: 'Sounds/Ambient/Creepy_Crying', scareValue: 20 },
+            'siren_cry.mp3': { name: 'Siren Cry', category: 'ambient', path: 'Sounds/Ambient/siren_cry', alternativePath: 'Sounds/Ambient/Siren_Cry', scareValue: 8 },
+            'monster_below.mp3': { name: 'Monster Below', category: 'ambient', path: 'Sounds/Ambient/monster_below', alternativePath: 'Sounds/Ambient/Monster_Below', scareValue: 12 },
+            
+            'save_me.mp3': { name: 'Save Me', category: 'dialogue', path: 'Sounds/Dialogue/save_me', alternativePath: 'Sounds/Dialogue/Save_Me', scareValue: 15 },
+            'i_see_you.mp3': { name: 'I See You', category: 'dialogue', path: 'Sounds/Dialogue/I_see_you', alternativePath: 'Sounds/Dialogue/i_see_you', scareValue: 18 },
+            'shadows.mp3': { name: 'Shadows', category: 'dialogue', path: 'Sounds/Dialogue/shadows', alternativePath: 'Sounds/Dialogue/Shadows', scareValue: 8 },
+            'darkness.mp3': { name: 'Darkness', category: 'dialogue', path: 'Sounds/Dialogue/darkness', alternativePath: 'Sounds/Dialogue/Darkness', scareValue: 12 },
+            
+            'scary_tune.mp3': { name: 'Scary Tune', category: 'music', path: 'Sounds/Music/scary_tune', alternativePath: 'Sounds/Music/Scary_Tune', scareValue: 15 },
+            'scary_hit.mp3': { name: 'Scary Hit', category: 'music', path: 'Sounds/Music/scary_hit', alternativePath: 'Sounds/Music/Scary_Hit', scareValue: 18 },
+            'scary_melody.mp3': { name: 'Scary Melody', category: 'music', path: 'Sounds/Music/scary_melody', alternativePath: 'Sounds/Music/Scary_Melody', scareValue: 8 },
+            'into_death.mp3': { name: 'Into Death', category: 'music', path: 'Sounds/Music/into_death', scareValue: 20 },
+            
+            'female_scream.mp3': { name: 'Female Scream', category: 'sfx', path: 'Sounds/SFX/female_scream', alternativePath: 'Sounds/SFX/Female_Scream', scareValue: 12 },
+            'howie_scream.mp3': { name: 'Howie Scream', category: 'sfx', path: 'Sounds/SFX/howie_scream', alternativePath: 'Sounds/SFX/Howie_Scream', scareValue: 18 },
+            'monster.mp3': { name: 'Monster', category: 'sfx', path: 'Sounds/SFX/monster', alternativePath: 'Sounds/SFX/Monster', scareValue: 15 },
+            'scream_male.mp3': { name: 'Scream (Male)', category: 'sfx', path: 'Sounds/SFX/scream_male', alternativePath: 'Sounds/SFX/Scream_Male', scareValue: 8 },
+            'zombie.mp3': { name: 'Zombie', category: 'sfx', path: 'Sounds/SFX/zombie', alternativePath: 'Sounds/SFX/Zombie', scareValue: 10 },
+            'zombie_2.mp3': { name: 'Zombie 2', category: 'sfx', path: 'Sounds/SFX/zombie_2', alternativePath: 'Sounds/SFX/Zombie_2', scareValue: 8 },
+            'scary_siren.mp3': { name: 'Scary Siren', category: 'sfx', path: 'Sounds/SFX/scary_siren', alternativePath: 'Sounds/SFX/Scary_Siren', scareValue: 10 },
+            'scary_hit_2.mp3': { name: 'Scary Hit 2', category: 'sfx', path: 'Sounds/SFX/scary_hit_2', alternativePath: 'Sounds/SFX/Scary_Hit_2', scareValue: 12 },
+            'scream.mp3': { name: 'Scream', category: 'sfx', path: 'Sounds/SFX/scream', alternativePath: 'Sounds/SFX/Scream', scareValue: 20 },
+            'ghoul_cry.mp3': { name: 'Ghoul Cry', category: 'sfx', path: 'Sounds/SFX/ghoul_cry', alternativePath: 'Sounds/SFX/Ghoul_Cry', scareValue: 14 }
+        };
+
+        let currentLevelSetup = [
+            { room: '0', ambient: null, music: null, triggers: [] },
+            { room: '1', ambient: null, music: null, triggers: [] },
+            { room: '2', ambient: null, music: null, triggers: [] },
+            { room: '3', ambient: null, music: null, triggers: [] }
+        ];
+
+        let isTesting = false;
+        let activeAudioNodes = [];
+        let redZoneSeconds = 0;
+        
+        let editingRoomIndex = 0; 
+        let pendingTargetFloorIndex = null;
+        let pendingDropX = 0;
+        
+        let animationFrameId = null;
+        let audioCtx = null;
+
+        window.onload = () => {
+            populateAssets();
+            setupDragMechanics();
+            scrollWorkspace(0);
+        };
+
+        function populateAssets() {
+            const list = document.getElementById('asset-list');
+            list.innerHTML = '';
+            for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
+                const div = document.createElement('div');
+                div.className = 'asset-item';
+                div.id = id;
+                div.setAttribute('draggable', 'true');
+                div.setAttribute('data-category', item.category);
+                let displayCat = item.category === 'dialogue' ? 'sfx' : item.category;
+                div.innerHTML = `<span>${item.name}</span><span class="asset-type-badge">${displayCat}</span>`;
+                list.appendChild(div);
+            }
+        }
+
+        function filterAssets(cat, element) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            element.classList.add('active');
+            document.querySelectorAll('.asset-item').forEach(item => {
+                const itemCat = item.getAttribute('data-category');
+                if (cat === 'all' || itemCat === cat || (cat === 'sfx' && itemCat === 'dialogue')) item.style.display = 'flex';
+                else item.style.display = 'none';
+            });
+        }
+
+        // Handle editing scroll views
+        function scrollWorkspace(direction) {
+            if (isTesting) return;
+            editingRoomIndex = Math.max(0, Math.min(3, editingRoomIndex + direction));
+            const scrollRow = document.getElementById('house-scroll-row');
+            scrollRow.style.transform = `translateX(-${editingRoomIndex * 25}%)`;
+        }
+
+        function setupDragMechanics() {
+            document.querySelectorAll('.asset-item, #tool-sensor').forEach(item => {
+                item.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', e.target.id));
+            });
+
+            document.querySelectorAll('.speaker-slot').forEach(slot => {
+                slot.addEventListener('dragover', (e) => e.preventDefault());
+                slot.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (isTesting) return;
+                    const id = e.dataTransfer.setData('text/plain', e.target.id);
+                    const asset = AUDIO_ASSET_DATABASE[id];
+                    if (!asset || asset.category !== slot.getAttribute('data-slot')) return;
+
+                    const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
+                    currentLevelSetup[roomIdx][slot.getAttribute('data-slot')] = id;
+                    slot.classList.add('occupied');
+                });
+            });
+
+            document.querySelectorAll('.room-floor').forEach(floor => {
+                floor.addEventListener('dragover', (e) => e.preventDefault());
+                floor.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (isTesting) return;
+                    if (e.dataTransfer.getData('text/plain') !== 'tool-sensor') return;
+
+                    pendingTargetFloorIndex = parseInt(floor.getAttribute('data-room-index'));
+                    
+                    // Capture exact relative horizontal coordinate inside room boundary
+                    const rect = floor.getBoundingClientRect();
+                    pendingDropX = e.clientX - rect.left;
+
+                    openSensorLinkModal();
+                });
+            });
+        }
+
+        function clearSpeaker(e) {
+            e.stopPropagation();
+            const slot = e.target.closest('.speaker-slot');
+            const slotType = slot.getAttribute('data-slot');
+            const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
+            currentLevelSetup[roomIdx][slotType] = null;
+            slot.classList.remove('occupied');
+        }
+
+        function openSensorLinkModal() {
+            const select = document.getElementById('modal-select');
+            select.innerHTML = '';
+            for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
+                if (item.category === 'sfx' || item.category === 'dialogue') {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.innerText = `[${item.category.toUpperCase()}] ${item.name}`;
+                    select.appendChild(opt);
+                }
+            }
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function confirmSensorLink() {
+            const assetId = document.getElementById('modal-select').value;
+            const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
+            const padId = 'pad-' + Date.now();
+            
+            // Log target with localized relative x coordinate plot point
+            currentLevelSetup[pendingTargetFloorIndex].triggers.push({ 
+                id: padId, 
+                assetId: assetId, 
+                x: pendingDropX,
+                triggered: false 
+            });
+
+            const pad = document.createElement('div');
+            pad.className = 'dropped-sensor-pad';
+            pad.id = padId;
+            pad.style.left = `${pendingDropX - 45}px`; // Center align onto custom dropped target
+            pad.title = `Triggers: ${AUDIO_ASSET_DATABASE[assetId].name}`;
+            pad.innerHTML = `<span class="clear-btn" onclick="clearSensor(event, '${padId}', ${pendingTargetFloorIndex})">×</span>`;
+
+            floorContainer.appendChild(pad);
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+
+        function clearSensor(e, padId, roomIndex) {
+            e.stopPropagation();
+            document.getElementById(padId).remove();
+            currentLevelSetup[roomIndex].triggers = currentLevelSetup[roomIndex].triggers.filter(t => t.id !== padId);
+        }
+
+        // Live testing procedures
+        function toggleTestMode() {
+            if (isTesting) stopTest();
+            else startTest();
+        }
+
+        function startTest() {
+            // Unlock audio context safely
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            isTesting = true;
+            redZoneSeconds = 0;
+            
+            // Clean out target trigger lock states
+            currentLevelSetup.forEach(r => r.triggers.forEach(t => t.triggered = false));
+
+            document.getElementById('test-btn').innerText = '⏹ HALT EVALUATION';
+            document.getElementById('test-btn').classList.add('testing');
+            document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'none');
+
+            const avatar = document.getElementById('customer-avatar');
+            avatar.style.display = 'block';
+
+            const scrollRow = document.getElementById('house-scroll-row');
+            const viewport = document.getElementById('scroller-viewport');
+            
+            // Total physical width of layout row boundary dimensions
+            const totalWidth = viewport.clientWidth * 4;
+            let currentX = 0; 
+            let lastRoomIndex = -1;
+            let lastTime = performance.now();
+
+            function updateProgress(timestamp) {
+                if (!isTesting) return;
+
+                let dt = (timestamp - lastTime) / 1000;
+                lastTime = timestamp;
+
+                // Move 150 pixels per second across layout row canvas
+                currentX += 150 * dt; 
+
+                if (currentX >= totalWidth) {
+                    stopTest();
+                    return;
+                }
+
+                // Viewport updates dynamically tracks visitor position coordinates
+                const viewWidth = viewport.clientWidth;
+                const activeRoomIdx = Math.floor(currentX / viewWidth);
+                
+                // Track scrolling transform matrix offsetting behind avatar target
+                scrollRow.style.transform = `translateX(-${activeRoomIdx * 25}%)`;
+
+                // Handle room backgrounds execution boundaries safely
+                if (activeRoomIdx !== lastRoomIndex) {
+                    processRoomBackgrounds(activeRoomIdx);
+                    lastRoomIndex = activeRoomIdx;
+                }
+
+                // Check relative floor trigger coordinate intersections
+                const relativeRoomX = currentX % viewWidth;
+                checkLiveTriggers(activeRoomIdx, relativeRoomX);
+
+                // Tracking system loop updates
+                const fillWidth = parseFloat(document.getElementById('meter-fill').style.width) || 0;
+                if (fillWidth > 75) {
+                    redZoneSeconds += dt;
+                    document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
+                }
+
+                animationFrameId = requestAnimationFrame(updateProgress);
+            }
+
+            animationFrameId = requestAnimationFrame(updateProgress);
+        }
+
+        function processRoomBackgrounds(roomIndex) {
+            activeAudioNodes = activeAudioNodes.filter(node => {
+                if (node.dataset.type === 'ambient' || node.dataset.type === 'music') {
+                    node.pause();
+                    return false;
+                }
+                return true;
+            });
+
+            const config = currentLevelSetup[roomIndex];
+            let baseScareValue = 0;
+            let layeredCount = 0;
+
+            if (config.ambient) {
+                baseScareValue += AUDIO_ASSET_DATABASE[config.ambient].scareValue;
+                layeredCount++;
+                playAudioLine(AUDIO_ASSET_DATABASE[config.ambient], 'ambient');
+            }
+            if (config.music) {
+                baseScareValue += AUDIO_ASSET_DATABASE[config.music].scareValue;
+                layeredCount++;
+                playAudioLine(AUDIO_ASSET_DATABASE[config.music], 'music');
+            }
+
+            updateMeterScore(baseScareValue, layeredCount);
+        }
+
+        function checkLiveTriggers(roomIndex, relativeX) {
+            const config = currentLevelSetup[roomIndex];
+            
+            config.triggers.forEach(trigger => {
+                // If player crosses the pad's horizontal coordinates, fire trigger
+                if (!trigger.triggered && Math.abs(relativeX - trigger.x) < 25) {
+                    trigger.triggered = true;
+                    
+                    playAudioLine(AUDIO_ASSET_DATABASE[trigger.assetId], 'trigger');
+                    
+                    // Increment scare score spikes dynamically
+                    let currentFill = parseFloat(document.getElementById('meter-fill').style.width) || 0;
+                    let baseCount = (config.ambient ? 1 : 0) + (config.music ? 1 : 0) + 1;
+                    let totalRaw = (config.ambient ? AUDIO_ASSET_DATABASE[config.ambient].scareValue : 0) +
+                                   (config.music ? AUDIO_ASSET_DATABASE[config.music].scareValue : 0) + 
+                                   AUDIO_ASSET_DATABASE[trigger.assetId].scareValue;
+                                   
+                    updateMeterScore(totalRaw, baseCount);
+                }
+            });
+        }
+
+        function updateMeterScore(rawScore, count) {
+            let multiplier = 1.0;
+            if (count === 2) multiplier = 1.3;
+            if (count >= 3) multiplier = 1.7;
+
+            let finalOutput = Math.min(Math.round(rawScore * multiplier), 100);
+            document.getElementById('meter-fill').style.width = `${finalOutput}%`;
+            document.getElementById('meter-label').innerText = `${finalOutput}%`;
+        }
+
+        function playAudioLine(assetObject, type) {
+            const audio = new Audio();
+            audio.dataset.type = type;
+            if (type === 'ambient' || type === 'music') audio.loop = true;
+            
+            audio.src = assetObject.path + '.mp3';
+            
+            audio.play().catch(err => {
+                // Fallback attempt for alternative casing rules
+                audio.src = assetObject.alternativePath + '.mp3';
+                audio.play().catch(finalErr => console.error("Audio block failure context paths matching: " + assetObject.path));
+            });
+            
+            activeAudioNodes.push(audio);
+        }
+
+        function stopTest() {
+            isTesting = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            document.getElementById('test-btn').innerText = '▶ RUN SYSTEM EVALUATION';
+            document.getElementById('test-btn').classList.remove('testing');
+            document.getElementById('customer-avatar').style.display = 'none';
+            document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'flex');
+            
+            // Snap back to editing coordinates view room
+            scrollWorkspace(0);
+            
+            activeAudioNodes.forEach(audio => {
+                audio.pause();
+                audio.src = '';
+            });
+            activeAudioNodes = [];
+
+            document.getElementById('meter-fill').style.width = '0%';
+            document.getElementById('meter-label').innerText = '0%';
+        }
+    </script>
+</body>
+</html>
