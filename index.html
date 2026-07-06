@@ -98,7 +98,7 @@
             width: 45px; height: 70px; font-size: 1.3rem; font-weight: bold; cursor: pointer; z-index: 40;
             display: flex; align-items: center; justify-content: center; border-radius: 8px;
         }
-        #nav-left { left: 360px; }
+        #nav-left { left: 20px; }
         #nav-right { right: 20px; }
 
         #meter-container { display: flex; align-items: center; gap: 15px; flex: 1; max-width: 280px; margin-left: 20px; }
@@ -214,7 +214,6 @@
         <div id="scroller-viewport">
             <div id="customer-avatar"></div>
             <div id="house-scroll-row">
-                <!-- Loop generated rooms -->
                 <script>
                     const roomNames = ["01: ENTRANCE HALL", "02: DREAD CORRIDOR", "03: GALLERY OF SHADOWS", "04: BASEMENT CRYPT"];
                     for(let i=0; i<4; i++) {
@@ -233,7 +232,6 @@
         </div>
     </div>
 
-    <!-- Educational Pop-up Modal Box -->
     <div id="edu-modal" class="modal">
         <div class="modal-content">
             <h3 id="modal-title">DESIGN LAB NOTE</h3>
@@ -242,7 +240,6 @@
         </div>
     </div>
 
-    <!-- Drop configuration context modal -->
     <div id="sensor-modal" class="modal">
         <div class="modal-content">
             <h3>LINK SFX SENSOR TARGET</h3>
@@ -265,9 +262,9 @@
         let currentTutorialIndex = 0;
         let isTutorialComplete = false;
 
-        let gameCycleMode = 'tutorial'; // 'tutorial' or 'live'
+        let gameCycleMode = 'tutorial'; 
         let currentCustomerCount = 0;
-        let currentDifficultyTier = 0; // 0: Young Boy, 1: Teenage Girl, 2: Adult Man
+        let currentDifficultyTier = 0; 
         
         const DIFFICULTY_CONFIG = [
             { label: "Young Boy", adaptationThreshold: 35, multiplier: 1.0, baseScareRequired: 40 },
@@ -288,7 +285,6 @@
 
         window.onload = () => {
             updateHUDState();
-            populateAssets();
             setupDragMechanics();
             scrollWorkspace(0);
         };
@@ -299,7 +295,6 @@
                 document.getElementById('run-cycle-display').innerText = `Tutorial (${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()})`;
                 document.getElementById('target-status').innerText = "Calibration";
                 
-                // Toggle editor restriction states based on active tutorial phase
                 for(let i=0; i<4; i++) {
                     TUTORIAL_PHASES.forEach(phase => {
                         let el = document.getElementById(`slot-${phase}-${i}`);
@@ -318,12 +313,20 @@
                     document.getElementById(`slot-ambient-${i}`).classList.remove('slot-disabled');
                 }
             }
+            populateAssets();
         }
 
         function populateAssets() {
             const list = document.getElementById('asset-list');
             list.innerHTML = '';
             for (const [id, item] of Object.entries(AUDIO_ASSET_DATABASE)) {
+                if (!isTutorialComplete) {
+                    const currentRequiredCategory = TUTORIAL_PHASES[currentTutorialIndex];
+                    if (item.category !== currentRequiredCategory || item.cost > 0) {
+                        continue; 
+                    }
+                }
+
                 const div = document.createElement('div');
                 div.className = `asset-item ${!item.purchased ? 'locked' : ''}`;
                 div.id = id;
@@ -348,9 +351,9 @@
                 asset.purchased = true;
                 populateAssets();
                 updateHUDState();
-                showModal("ASSET UNLOCKED", `Functional Maths Action: Successfully processed deduction of £${asset.cost}. Balance remaining: £${walletBalance}. This sound asset is now free to use infinitely across your timeline.`);
+                showModal("ASSET UNLOCKED", `Functional Maths Action: Deduction of £${asset.cost} processed. Balance remaining: £${walletBalance}.`);
             } else {
-                showModal("BUDGET DEFICIT", `Insufficient funds available to purchase ${asset.name}. You require an additional £${asset.cost - walletBalance}. Run tracking cycles with your baseline tools to process more revenue.`);
+                showModal("BUDGET DEFICIT", `Insufficient funds available to purchase ${asset.name}. You require an additional £${asset.cost - walletBalance}.`);
             }
         }
 
@@ -359,7 +362,7 @@
             element.classList.add('active');
             document.querySelectorAll('.asset-item').forEach(item => {
                 const itemCat = AUDIO_ASSET_DATABASE[item.id].category;
-                if (cat === 'all' || itemCat === cat) item.style.style.display = 'flex';
+                if (cat === 'all' || itemCat === cat) item.style.display = 'flex';
                 else item.style.display = 'none';
             });
         }
@@ -393,9 +396,9 @@
                     slot.childNodes[0].nodeValue = asset.name;
 
                     if(!isTutorialComplete && currentTutorialIndex === 0 && asset.category === 'music') {
-                        showModal("DESIGN THEORY: MUSIC", "In game setting architecture, background music forms the emotional anchor. It shapes sub-conscious expectation and signals underlying tension before physical actions or threats materialize.");
+                        showModal("DESIGN THEORY: MUSIC", "In game setting architecture, background music forms the emotional anchor, shaping expectation and tension.");
                     } else if(!isTutorialComplete && currentTutorialIndex === 1 && asset.category === 'ambient') {
-                        showModal("DESIGN THEORY: AMBIENT", "Ambient sounds flesh out spatial depth. Distant looping echoes, wind, and creaks convince the brain that the digital location is alive, breaking the vacuum of clean silence.");
+                        showModal("DESIGN THEORY: AMBIENT", "Ambient sounds flesh out spatial depth, ensuring the layout feels layered and immersive.");
                     }
                 });
             });
@@ -428,12 +431,11 @@
             const assetId = document.getElementById('modal-select').value;
             const floorContainer = document.querySelectorAll('.room-floor')[pendingTargetFloorIndex];
             
-            // Educational Rule Check: Diminishing returns pop-up tracker
             const matchingTriggers = currentLevelSetup[pendingTargetFloorIndex].triggers.filter(t => t.assetId === assetId);
             let tooClose = matchingTriggers.some(t => Math.abs(t.x - pendingDropX) < 120);
             
             if(tooClose) {
-                showModal("IMMERSION ERROR: REPETITION", "Warning! Placing identical sound effects in extreme spatial proximity breaks design realism. Customers build adaptation, dropping overall fear curves dramatically.");
+                showModal("IMMERSION ERROR: REPETITION", "Warning! Placing identical sound effects too close together reduces effectiveness. Customers build adaptation, dropping overall effectiveness curves.");
             }
 
             const padId = 'pad-' + Date.now();
@@ -486,7 +488,7 @@
 
             const avatar = document.getElementById('customer-avatar');
             avatar.style.display = 'block';
-            avatar.style.backgroundImage = "url('Assets/customer_1.png')"; // Start normal layout
+            avatar.style.backgroundImage = "url('Assets/customer_1.png')"; 
 
             const scrollRow = document.getElementById('house-scroll-row');
             const viewport = document.getElementById('scroller-viewport');
@@ -501,7 +503,7 @@
                 let dt = (timestamp - lastTime) / 1000;
                 lastTime = timestamp;
 
-                currentX += 190 * dt; // Dynamic progression movement speed tracking
+                currentX += 190 * dt; 
                 if (currentX >= totalWidth) {
                     completeEvaluationRun();
                     return;
@@ -520,9 +522,8 @@
 
                 const currentAnxiety = parseFloat(document.getElementById('meter-fill').style.width) || 0;
                 
-                // Dynamic Character Sprite Swapping Module
                 if(currentAnxiety >= 75) {
-                    avatar.style.backgroundImage = "url('Assets/customer_2.png')"; // Swap instantly to panicked version
+                    avatar.style.backgroundImage = "url('Assets/customer_2.png')"; 
                     redZoneSeconds += dt;
                     document.getElementById('red-zone-counter').innerText = redZoneSeconds.toFixed(1);
                 } else {
@@ -570,7 +571,7 @@
             audio.src = asset.path + '.mp3';
             audio.dataset.type = type;
             if(type !== 'trigger') audio.loop = true;
-            audio.play().catch(() => console.log("Audio node playback choked by security rules. Use GitHub Pages host to authorize safely."));
+            audio.play().catch(() => console.log("Audio contextual block handled."));
             activeAudioNodes.push(audio);
         }
 
@@ -594,13 +595,12 @@
                 if (currentTutorialIndex >= TUTORIAL_PHASES.length) {
                     isTutorialComplete = true;
                     gameCycleMode = 'live';
-                    showModal("TRAINING EVALUATION COMPLETE", "Excellent job, Chris. Your setup has verified basic operation across Music, Ambience, and Sensor SFX parameters. You are now entering Live Evaluation with active resource management.");
+                    showModal("TRAINING EVALUATION COMPLETE", "Your setup has verified basic operation across Music, Ambience, and Sensor SFX. You are now entering Live Evaluation with active resource management.");
                 } else {
-                    showModal("PHASE PASSED", `Baseline parameters verified. Progression unlocked for your next tutorial focus: ${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()}`);
+                    showModal("PHASE PASSED", `Baseline parameters verified. Progression unlocked for your next focus: ${TUTORIAL_PHASES[currentTutorialIndex].toUpperCase()}`);
                 }
             } else {
-                // Live Cycle Mechanics: Basic Functional Maths Payout processing module
-                let payloadEarnings = Math.round(redZoneSeconds * 2.5); // Earn £2.50 per second spent sustained in panic zone
+                let payloadEarnings = Math.round(redZoneSeconds * 2.5); 
                 walletBalance += payloadEarnings;
                 currentCustomerCount++;
 
@@ -609,7 +609,7 @@
                 if(currentCustomerCount >= 3) {
                     currentCustomerCount = 0;
                     currentDifficultyTier = Math.min(DIFFICULTY_CONFIG.length - 1, currentDifficultyTier + 1);
-                    showModal("DIFFICULTY SCALING INCREASED", `Haunted House prestige level increased! Your next visitors match profile type: ${DIFFICULTY_CONFIG[currentDifficultyTier].label.toUpperCase()}. Their fear adaptations are higher, making them harder to panic.`);
+                    showModal("DIFFICULTY SCALING INCREASED", `Your next visitors match profile type: ${DIFFICULTY_CONFIG[currentDifficultyTier].label.toUpperCase()}. Their fear adaptations are higher.`);
                 }
             }
             updateHUDState();
