@@ -59,14 +59,16 @@
         
         .asset-item {
             background: #1a2230; border: 2px solid var(--border-color); padding: 10px; border-radius: 6px;
-            cursor: grab; font-size: 0.8rem; transition: all 0.2s; font-weight: bold;
+            cursor: grab; font-size: 0.75rem; transition: all 0.2s; font-weight: bold;
             display: flex; align-items: center; justify-content: space-between; position: relative;
+            user-select: none;
         }
         .asset-item.locked { opacity: 0.4; cursor: not-allowed; border-style: dotted; }
-        .asset-item:not(.locked):hover { border-color: var(--accent-color); background: #222d3f; transform: scale(1.01); }
+        .asset-item:not(.locked):hover { border-color: var(--accent-color); background: #222d3f; }
         .buy-overlay {
             position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7);
             display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer;
+            z-index: 10;
         }
         .buy-btn { background: #16aa6c; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 3px; }
 
@@ -134,15 +136,15 @@
 
         .speaker-slots { display: flex; gap: 12px; margin-top: 10px; min-height: 50px; }
         .speaker-slot {
-            width: 105px; height: 45px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 6px;
+            width: 120px; height: 45px; background: rgba(0,0,0,0.6); border: 2px dashed #4f637a; border-radius: 6px;
             display: flex; align-items: center; justify-content: center; font-size: 0.75rem; cursor: pointer;
             position: relative; transition: all 0.2s; font-weight: bold; text-align: center; padding: 2px;
         }
         .speaker-slot.slot-hidden { display: none !important; }
-        .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; }
+        .speaker-slot.occupied { border-style: solid; border-color: var(--ghost-glow); background: #1a3547; color: #fff; }
 
         .room-floor { position: absolute; bottom: 0; left: 0; width: 100%; height: 70px; z-index: 15; }
-        .room-floor.floor-disabled { cursor: not-allowed; }
+        .room-floor.floor-disabled { cursor: not-allowed; background: rgba(255,0,0,0.03); }
 
         .dropped-sensor-pad {
             width: 80px; height: 16px; background: #26a96c; border: 2px solid #fff; border-radius: 4px 4px 0 0;
@@ -160,18 +162,19 @@
         }
         .speaker-slot.occupied:hover .clear-btn, .dropped-sensor-pad:hover .clear-btn { display: flex; }
 
+        /* Highly Optimized Character Rig Layer */
         #customer-avatar {
-            width: 150px; 
-            height: 240px; 
-            position: absolute; 
-            bottom: 15px; 
-            left: 0px; 
-            z-index: 100;
-            pointer-events: none; 
+            width: 150px !important; 
+            height: 240px !important; 
+            position: absolute !important; 
+            bottom: 20px !important; 
+            left: 0; 
+            z-index: 200 !important;
             display: none; 
-            background-size: contain; 
-            background-repeat: no-repeat; 
-            background-position: bottom;
+            background-size: contain !important; 
+            background-repeat: no-repeat !important; 
+            background-position: bottom !important;
+            pointer-events: none;
         }
 
         .modal {
@@ -184,6 +187,8 @@
         }
         .modal-content h3 { color: var(--accent-color); margin-bottom: 12px; font-size: 1.1rem; letter-spacing: 1px; }
         .modal-content p { font-size: 0.85rem; line-height: 1.4; color: #b4c7dc; margin-bottom: 20px; text-align: left; background: #0c1015; padding: 12px; border-radius: 4px; border-left: 3px solid var(--ghost-glow); }
+        
+        .preview-indicator { font-size: 0.6rem; color: var(--ghost-glow); border: 1px solid var(--ghost-glow); padding: 1px 3px; border-radius: 3px; margin-left: 4px; text-transform: uppercase; }
     </style>
 </head>
 <body>
@@ -284,6 +289,7 @@
         let walletBalance = 50;
         let isTesting = false;
         let activeAudioNodes = [];
+        let previewAudioNode = null; 
         let redZoneSeconds = 0;
         let editingRoomIndex = 0;
         let animationFrameId = null;
@@ -360,8 +366,12 @@
                 const div = document.createElement('div');
                 div.className = `asset-item ${!item.purchased ? 'locked' : ''}`;
                 div.id = id;
-                if(item.purchased) div.setAttribute('draggable', 'true');
-                div.innerHTML = `<span>${item.name} (Value: ${item.scareValue})</span><span class="asset-type-badge">${item.category.toUpperCase()}</span>`;
+                if(item.purchased) {
+                    div.setAttribute('draggable', 'true');
+                    // Injected Audio Click-To-Preview Trigger Hook
+                    div.addEventListener('click', () => playLibraryPreview(id));
+                }
+                div.innerHTML = `<div><span>${item.name} (Value: ${item.scareValue})</span>${item.purchased ? '<span class="preview-indicator">Listen</span>' : ''}</div><span class="asset-type-badge">${item.category.toUpperCase()}</span>`;
                 
                 if(!item.purchased) {
                     const overlay = document.createElement('div');
@@ -372,12 +382,25 @@
                 list.appendChild(div);
             }
             
-            document.querySelectorAll('.asset-item').forEach(item => {
+            // Fixed Drag-Start String formatting rules
+            document.querySelectorAll('.asset-list .asset-item').forEach(item => {
                 item.addEventListener('dragstart', (e) => {
-                    if(item.classList.contains('locked')) { e.preventDefault(); return; }
-                    e.dataTransfer.setData('text', e.target.id);
+                    if(e.target.classList.contains('locked')) { e.preventDefault(); return; }
+                    e.dataTransfer.setData('text/plain', e.target.id);
                 });
             });
+        }
+
+        // Click-To-Preview Player Module
+        function playLibraryPreview(id) {
+            if (isTesting) return;
+            if (previewAudioNode) {
+                previewAudioNode.pause();
+                previewAudioNode = null;
+            }
+            const asset = AUDIO_ASSET_DATABASE[id];
+            previewAudioNode = new Audio(asset.path + '.mp3');
+            previewAudioNode.play().catch(() => console.log("Interaction check handled."));
         }
 
         function purchaseAsset(e, id) {
@@ -408,20 +431,23 @@
         }
 
         function setupDragMechanics() {
-            document.getElementById('tool-sensor').addEventListener('dragstart', (e) => {
-                if(e.currentTarget.classList.contains('disabled')) { e.preventDefault(); return; }
-                e.dataTransfer.setData('text', e.currentTarget.id);
+            // Re-anchored explicit binding listeners to root document scopes to guarantee transfer capture
+            document.getElementById('sidebar').addEventListener('dragstart', (e) => {
+                const targetItem = e.target.closest('.asset-item, #tool-sensor');
+                if(!targetItem || targetItem.classList.contains('disabled') || targetItem.classList.contains('locked')) return;
+                e.dataTransfer.setData('text/plain', targetItem.id);
             });
 
-            document.querySelectorAll('.speaker-slot').forEach(slot => {
-                slot.addEventListener('dragover', (e) => e.preventDefault());
-                slot.addEventListener('drop', (e) => {
+            document.querySelectorAll('.speaker-slots').forEach(slotContainer => {
+                slotContainer.addEventListener('dragover', (e) => e.preventDefault());
+                slotContainer.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (isTesting || slot.classList.contains('slot-hidden')) return;
-                    
-                    const id = e.dataTransfer.getData('text');
+                    const id = e.dataTransfer.getData('text/plain');
                     const asset = AUDIO_ASSET_DATABASE[id];
-                    if (!asset || asset.category !== slot.getAttribute('data-slot')) return;
+                    const slot = e.target.closest('.speaker-slot');
+                    
+                    if (!slot || isTesting || slot.classList.contains('slot-hidden') || !asset) return;
+                    if (asset.category !== slot.getAttribute('data-slot')) return;
 
                     const roomIdx = parseInt(slot.closest('.room').getAttribute('data-room-index'));
                     currentLevelSetup[roomIdx][slot.getAttribute('data-slot')] = id;
@@ -441,7 +467,7 @@
                 floor.addEventListener('drop', (e) => {
                     e.preventDefault();
                     if (isTesting || floor.classList.contains('floor-disabled')) return;
-                    if (e.dataTransfer.getData('text') !== 'tool-sensor') return;
+                    if (e.dataTransfer.getData('text/plain') !== 'tool-sensor') return;
 
                     pendingTargetFloorIndex = parseInt(floor.getAttribute('data-room-index'));
                     const rect = floor.getBoundingClientRect();
@@ -511,6 +537,8 @@
         }
 
         function startEvaluation() {
+            if (previewAudioNode) { previewAudioNode.pause(); previewAudioNode = null; }
+            
             isTesting = true;
             redZoneSeconds = 0;
             currentLevelSetup.forEach(r => r.triggers.forEach(t => t.triggered = false));
@@ -519,8 +547,10 @@
             document.getElementById('test-btn').classList.add('testing');
             document.querySelectorAll('.nav-arrow').forEach(btn => btn.style.display = 'none');
 
+            // Hardcode layout forcing overrides to guarantee sprite visibility across frameworks
             const avatar = document.getElementById('customer-avatar');
             avatar.style.display = 'block';
+            avatar.style.left = '0px';
             avatar.style.backgroundImage = "url('Assets/customer_1.png')"; 
 
             const scrollRow = document.getElementById('house-scroll-row');
@@ -544,6 +574,9 @@
 
                 const viewWidth = viewport.clientWidth;
                 const activeRoomIdx = Math.floor(currentX / viewWidth);
+                
+                // Track customer position directly relative to current viewport offset scroll metrics
+                avatar.style.left = `${currentX}px`;
                 scrollRow.style.transform = `translateX(-${(currentX / totalWidth) * 100}%)`;
 
                 if (activeRoomIdx !== lastRoomIndex) {
