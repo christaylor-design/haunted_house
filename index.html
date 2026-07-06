@@ -160,7 +160,6 @@
         }
         .speaker-slot.occupied:hover .clear-btn, .dropped-sensor-pad:hover .clear-btn { display: flex; }
 
-        /* Customer avatar scale boosted to 250% */
         #customer-avatar {
             width: 150px; 
             height: 240px; 
@@ -309,7 +308,6 @@
                 document.getElementById('target-status').innerText = "Calibration Setup";
                 document.getElementById('test-btn').innerText = "▶ RUN DESIGN CALIBRATION";
                 
-                // Pure Dynamic Separation: Restructuring layouts relative to active phase
                 for(let i=0; i<4; i++) {
                     let mSlot = document.getElementById(`slot-music-${i}`);
                     let aSlot = document.getElementById(`slot-ambient-${i}`);
@@ -338,7 +336,6 @@
                 document.getElementById('test-btn').innerText = "▶ RUN CUSTOMER SCENARIO";
                 document.getElementById('tool-sensor').classList.remove('disabled');
                 
-                // Expose every single interaction anchor point inside Live game modes
                 for(let i=0; i<4; i++) {
                     document.getElementById(`slot-music-${i}`).classList.remove('slot-hidden');
                     document.getElementById(`slot-ambient-${i}`).classList.remove('slot-hidden');
@@ -375,11 +372,10 @@
                 list.appendChild(div);
             }
             
-            // Re-apply binding listeners to prevent item attachment blocks
             document.querySelectorAll('.asset-item').forEach(item => {
                 item.addEventListener('dragstart', (e) => {
                     if(item.classList.contains('locked')) { e.preventDefault(); return; }
-                    e.dataTransfer.setData('text', e.currentTarget.id);
+                    e.dataTransfer.setData('text', e.target.id);
                 });
             });
         }
