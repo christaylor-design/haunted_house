@@ -24,11 +24,11 @@ button,input,select{font:inherit}.app{display:flex;height:100vh;width:100vw}.sid
     <div class="toolCard" id="sensorTool" draggable="true"><strong>👣 SENSOR PAD</strong><div class="phaseText">Used in Phase 3 and Live Mode to place trigger points on room floors. Max 4 per room.</div></div>
     <div class="tabs"><button class="tab active" data-tab="all">All</button><button class="tab" data-tab="music">Music</button><button class="tab" data-tab="ambient">Ambient</button><button class="tab" data-tab="sfx">SFX</button></div>
     <div class="assetList" id="assetList"></div>
-    <div class="tips"><strong style="color:var(--cyan)">Designer notes</strong><p class="phaseText">Click-to-select then click a target, or drag an asset onto a slot/floor. Missing audio files are safely replaced with WebAudio tones so the game still works on GitHub Pages.</p></div>
+    <div class="tips"><strong style="color:var(--cyan)">Designer notes</strong><p class="phaseText">Click-to-select then click a target, or drag an asset onto a slot/floor. Missing audio files are safely replaced with WebAudio tones. Customer runs now award money, with bonus cash for time spent above 70% anxiety.</p></div>
   </aside>
   <main class="workspace">
     <div class="topbar">
-      <button class="btn" id="nextPhase">Next Phase</button><button class="btn secondary" id="runBtn">Run Design Calibration</button><button class="btn danger" id="haltBtn">Halt Run Evaluation</button><button class="btn secondary" id="resetBtn">Reset Design</button>
+      <button class="btn" id="nextPhase">Next Phase</button><button class="btn secondary" id="testBtn">Test</button><button class="btn secondary" id="openBtn" style="display:none">Open</button><button class="btn danger" id="closedBtn" style="display:none">Closed</button>
       <div class="meterWrap"><div class="meterLabels"><span>Anxiety Index</span><strong id="meterText">0%</strong></div><div class="meter"><div class="meterFill" id="meterFill"></div></div></div>
     </div>
     <section class="viewport" id="viewport">
@@ -50,12 +50,12 @@ const AUDIO_ASSET_DATABASE={
 };
 const ROOMS=['01: ENTRANCE HALL','02: DREAD CORRIDOR','03: GALLERY OF SHADOWS','04: BASEMENT CRYPT'];
 const PHASES=[
- {name:'Phase 1: Music Calibration',step:'1/4',text:"Place the free Scary Tune into each room's Music speaker slot. Earlier choices will stay active as you progress.",allow:{music:true,ambient:false,sfx:false},filter:['scary_tune'],run:'Run Design Calibration'},
- {name:'Phase 2: Ambient Calibration',step:'2/4',text:'Music locks but remains active. Add the free Chime Loop to Ambient speaker slots.',allow:{music:false,ambient:true,sfx:false},filter:['chime'],run:'Run Design Calibration'},
- {name:'Phase 3: SFX Calibration',step:'3/4',text:'Music and Ambient remain active. Place Sensor Pads linked to Zombie Groan on the floors.',allow:{music:false,ambient:false,sfx:true},filter:['zombie'],run:'Run Design Calibration'},
- {name:'Live Game Mode',step:'4/4',text:'The full house is unlocked. Buy premium sounds, optimise layering, and run a customer scenario.',allow:{music:true,ambient:true,sfx:true},filter:Object.keys(AUDIO_ASSET_DATABASE),run:'Run Customer Scenario'}
+ {name:'Phase 1: Music Calibration',step:'1/4',text:"Place the free Scary Tune into each room's Music speaker slot. Earlier choices will stay active as you progress.",allow:{music:true,ambient:false,sfx:false},filter:['scary_tune'],run:'Test'},
+ {name:'Phase 2: Ambient Calibration',step:'2/4',text:'Music locks but remains active. Add the free Chime Loop to Ambient speaker slots.',allow:{music:false,ambient:true,sfx:false},filter:['chime'],run:'Test'},
+ {name:'Phase 3: SFX Calibration',step:'3/4',text:'Music and Ambient remain active. Place Sensor Pads linked to Zombie Groan on the floors.',allow:{music:false,ambient:false,sfx:true},filter:['zombie'],run:'Test'},
+ {name:'Live Game Mode',step:'4/4',text:'The full house is unlocked. Earn money from customer runs, then buy premium sounds and optimise your audio layers.',allow:{music:true,ambient:true,sfx:true},filter:Object.keys(AUDIO_ASSET_DATABASE),run:'Open'}
 ];
-let state={phase:0,cash:50,currentTab:'all',selectedAsset:null,selectedTool:null,currentRoom:0,running:false,anxiety:0,runRAF:null,runStart:0,customerTerrified:false,activeLoops:{music:null,ambient:null},lastRoom:-1,triggeredSensors:new Set(),dragItem:null,ctx:null,master:null};
+let state={phase:0,cash:50,currentTab:'all',selectedAsset:null,selectedTool:null,currentRoom:0,running:false,runMode:'test',anxiety:0,runRAF:null,runStart:0,lastFrame:0,timeAbove70:0,runEarned:0,activeSensorBoosts:[],customerTerrified:false,activeLoops:{music:null,ambient:null},lastRoom:-1,triggeredSensors:new Set(),dragItem:null,ctx:null,master:null};
 let design=ROOMS.map(()=>({music:null,ambient:null,sensors:[]}));
 const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
 function init(){buildRooms(); bindUI(); renderPhase(); renderAssets(); updateStats(); showToast('Welcome, audio designer. Start by selecting Scary Tune.');}
@@ -65,11 +65,18 @@ function buildRooms(){const row=$('#houseRow'); row.innerHTML=''; ROOMS.forEach(
 function bindUI(){ $$('.tab').forEach(b=>b.onclick=()=>{state.currentTab=b.dataset.tab; $$('.tab').forEach(x=>x.classList.toggle('active',x===b)); renderAssets();});
  $('#sensorTool').onclick=()=>{state.selectedTool=state.selectedTool==='sensor'?null:'sensor'; state.selectedAsset=null; updateSelections();}; $('#sensorTool').addEventListener('dragstart',()=>state.dragItem='sensor'); $('#sensorTool').addEventListener('dragend',()=>state.dragItem=null);
  $('#nextPhase').onclick=()=>{ if(state.phase<3){state.phase++; renderPhase(); renderAssets(); showToast(PHASES[state.phase].name);} else showModal('Live mode already active','You have unlocked the full design simulation. Improve the resource mix or run the customer scenario.'); };
- $('#runBtn').onclick=runScenario; $('#haltBtn').onclick=haltRun; $('#resetBtn').onclick=resetDesign; $('#modalClose').onclick=()=>$('#modalOverlay').style.display='none';
+ $('#testBtn').onclick=()=>runScenario('test'); $('#openBtn').onclick=()=>runScenario('customer'); $('#closedBtn').onclick=()=>haltRun(true); $('#modalClose').onclick=()=>$('#modalOverlay').style.display='none';
  $('#prevRoom').onclick=()=>scrollRoom(state.currentRoom-1); $('#nextRoom').onclick=()=>scrollRoom(state.currentRoom+1);}
-function renderPhase(){const p=PHASES[state.phase]; $('#phaseName').textContent=p.name; $('#phaseStep').textContent=p.step; $('#phaseText').textContent=p.text; $('#runBtn').textContent=p.run;
+function renderPhase(){const p=PHASES[state.phase]; $('#phaseName').textContent=p.name; $('#phaseStep').textContent=p.step; $('#phaseText').textContent=p.text; updateControls();
  $$('.speaker-slots').forEach(el=>{const kind=el.dataset.kind; const editable=p.allow[kind]; el.classList.toggle('editable',editable); el.classList.toggle('locked',!editable); el.classList.toggle('hiddenPhase',(kind==='music'&&state.phase<0)||(kind==='ambient'&&state.phase<1));});
  $$('.room-floor').forEach(el=>el.classList.toggle('open',p.allow.sfx)); updateAssignments(); updateSelections();}
+function updateControls(){
+ const live=state.phase>=3;
+ $('#nextPhase').style.display=live?'none':'';
+ $('#testBtn').style.display=live?'none':'';
+ $('#openBtn').style.display=live?'':'none';
+ $('#closedBtn').style.display=live?'':'none';
+}
 function visibleAssetIds(){let allowed=PHASES[state.phase].filter; return allowed.filter(id=>state.currentTab==='all'||AUDIO_ASSET_DATABASE[id].category===state.currentTab);}
 function renderAssets(){const list=$('#assetList'); list.innerHTML=''; visibleAssetIds().forEach(id=>{const a=AUDIO_ASSET_DATABASE[id]; const card=document.createElement('div'); card.className='asset'+(a.purchased?'':' locked')+(state.selectedAsset===id?' selected':''); card.draggable=a.purchased; card.innerHTML=`<h3>${a.purchased?'🔊':'🔒'} ${a.name}</h3><div class="meta"><span class="pill">${a.category.toUpperCase()}</span><span>Scare +${a.scareValue}</span><span>${a.cost?`£${a.cost}`:'Free'}</span></div>${!a.purchased?`<button class="buy">Buy / Unlock</button>`:''}`;
  card.onclick=(e)=>{ if(e.target.classList.contains('buy')) return buyAsset(id); if(!a.purchased){buyAsset(id);return;} state.selectedAsset=state.selectedAsset===id?null:id; state.selectedTool=null; updateSelections();};
@@ -77,10 +84,17 @@ function renderAssets(){const list=$('#assetList'); list.innerHTML=''; visibleAs
 function buyAsset(id){const a=AUDIO_ASSET_DATABASE[id]; if(a.purchased)return; if(state.cash<a.cost){showModal('Budget shortfall',`You need £${a.cost-state.cash} more to unlock ${a.name}. This is a resource constraint: choose lower-cost assets or improve your design with existing sounds first.`);return;} state.cash-=a.cost; a.purchased=true; showToast(`${a.name} unlocked for £${a.cost}.`); renderAssets(); updateStats();}
 function updateSelections(){ $$('.asset').forEach((c,i)=>c.classList.toggle('selected',visibleAssetIds()[i]===state.selectedAsset)); $('#sensorTool').classList.toggle('selected',state.selectedTool==='sensor');}
 function placeOnSlot(el){if(state.running)return; const p=PHASES[state.phase], kind=el.dataset.kind, room=+el.dataset.room; if(!p.allow[kind]){showModal('Slot locked',`${kind} is not editable in this phase, but any previous placement stays active.`);return;} const id=state.selectedAsset; if(!id){showToast('Select an audio asset first.');return;} const asset=AUDIO_ASSET_DATABASE[id]; if(asset.category!==kind){showModal('Category mismatch',`This slot expects ${kind}. ${asset.name} is ${asset.category}.`);return;} if(!asset.purchased){buyAsset(id);return;} design[room][kind]=id; previewAudio(id,false); updateAssignments(); updateStats(); showToast(`${asset.name} assigned to ${ROOMS[room]}.`);}
-function placeSensor(e,el){if(state.running)return; if(!PHASES[state.phase].allow.sfx){showModal('Floor sensors locked','Sensor placement unlocks in Phase 3 and stays available in Live Game Mode.');return;} const room=+el.dataset.room; if(design[room].sensors.length>=4){showModal('Sensor cap reached','Each room is limited to 4 sensor pads. This prevents spam and encourages purposeful trigger placement.');return;} let id=state.selectedAsset && AUDIO_ASSET_DATABASE[state.selectedAsset].category==='sfx'?state.selectedAsset:'zombie'; if(!AUDIO_ASSET_DATABASE[id].purchased){buyAsset(id);return;} const rect=el.getBoundingClientRect(); const x=Math.max(20,Math.min(rect.width-20,e.clientX-rect.left)); const y=Math.max(22,Math.min(rect.height-20,e.clientY-rect.top));
+function placeSensor(e,el){if(state.running)return; if(!PHASES[state.phase].allow.sfx){showModal('Floor sensors locked','Sensor placement unlocks in Phase 3 and stays available in Live Game Mode. Customer runs now pay out money, so stronger designs can fund better assets.');return;} const room=+el.dataset.room; if(design[room].sensors.length>=4){showModal('Sensor cap reached','Each room is limited to 4 sensor pads. Click an existing sensor pad to remove it, then place a new one with a different sound.');return;} let id=state.selectedAsset && AUDIO_ASSET_DATABASE[state.selectedAsset].category==='sfx'?state.selectedAsset:'zombie'; if(!AUDIO_ASSET_DATABASE[id].purchased){buyAsset(id);return;} const rect=el.getBoundingClientRect(); const x=Math.max(20,Math.min(rect.width-20,e.clientX-rect.left)); const y=Math.max(22,Math.min(rect.height-20,e.clientY-rect.top));
  const tooClose=design[room].sensors.some(s=>s.asset===id && Math.hypot(s.x-x,s.y-y)<120); if(tooClose) showModal('Repetition penalty warning','You placed the same SFX within 120px of another trigger. In real sound design, close repetition can reduce immersion and create auditory fatigue. The pad was placed, but your design score may suffer.');
  design[room].sensors.push({x,y,asset:id}); previewAudio(id,false); updateAssignments(); updateStats();}
-function updateAssignments(){design.forEach((r,i)=>{['music','ambient'].forEach(k=>{const el=document.querySelector(`.speaker-slots.${k}[data-room="${i}"] .assigned`); el.textContent=r[k]?AUDIO_ASSET_DATABASE[r[k]].name:'Empty';}); const floor=document.querySelector(`.room-floor[data-room="${i}"]`); floor.querySelectorAll('.sensor').forEach(x=>x.remove()); r.sensors.forEach((s,idx)=>{const d=document.createElement('div'); d.className='sensor'; d.style.left=s.x+'px'; d.style.top=s.y+'px'; d.title=AUDIO_ASSET_DATABASE[s.asset].name; d.textContent=idx+1; floor.appendChild(d);});});}
+function updateAssignments(){design.forEach((r,i)=>{['music','ambient'].forEach(k=>{const el=document.querySelector(`.speaker-slots.${k}[data-room="${i}"] .assigned`); el.textContent=r[k]?AUDIO_ASSET_DATABASE[r[k]].name:'Empty';}); const floor=document.querySelector(`.room-floor[data-room="${i}"]`); floor.querySelectorAll('.sensor').forEach(x=>x.remove()); r.sensors.forEach((s,idx)=>{const d=document.createElement('div'); d.className='sensor'; d.style.left=s.x+'px'; d.style.top=s.y+'px'; d.title='Click to remove: '+AUDIO_ASSET_DATABASE[s.asset].name; d.textContent=idx+1; d.addEventListener('click',ev=>{ev.stopPropagation(); removeSensor(i,idx);}); floor.appendChild(d);});});}
+function removeSensor(room,idx){
+ if(state.running){showToast('Close the house or wait for the test to finish before editing sensors.');return;}
+ const removed=design[room].sensors.splice(idx,1)[0];
+ updateAssignments();
+ updateStats();
+ if(removed) showToast(`${AUDIO_ASSET_DATABASE[removed.asset].name} sensor removed. You can now place a new pad.`);
+}
 function updateStats(){ $('#cash').textContent='£'+state.cash; const pot=design.reduce((sum,r)=>sum+(r.music?AUDIO_ASSET_DATABASE[r.music].scareValue:0)+(r.ambient?AUDIO_ASSET_DATABASE[r.ambient].scareValue:0)+r.sensors.reduce((a,s)=>a+AUDIO_ASSET_DATABASE[s.asset].scareValue,0),0); $('#potential').textContent=pot;}
 function scrollRoom(n){state.currentRoom=Math.max(0,Math.min(3,n)); $('#houseRow').style.transform=`translateX(${-25*state.currentRoom}%)`;}
 function resetDesign(){haltRun(); design=ROOMS.map(()=>({music:null,ambient:null,sensors:[]})); state.phase=0; state.cash=50; Object.entries(AUDIO_ASSET_DATABASE).forEach(([id,a])=>{a.purchased=a.cost===0}); renderPhase(); renderAssets(); updateAssignments(); updateStats(); setMeter(0); scrollRoom(0); showToast('Design reset.');}
@@ -92,13 +106,83 @@ function synth(id,loop=false){ensureAudio(); const ctx=state.ctx, asset=AUDIO_AS
 function previewAudio(id,loop){ensureAudio(); const el=tryAudioElement(id,loop,()=>{}); el._started=true; const p=el.play(); if(p) p.catch(()=>synth(id,loop)); if(!loop) setTimeout(()=>{try{el.pause()}catch(e){}},1200); return {el,stop(){try{el.pause();el.currentTime=0}catch(e){}}};}
 function startLoop(kind,id){stopLoop(kind); let fallbackStarted=false; const player=tryAudioElement(id,true,()=>{ if(!fallbackStarted){fallbackStarted=true; state.activeLoops[kind]=synth(id,true);} }); player._started=true; const p=player.play(); state.activeLoops[kind]={stop(){try{player.pause();player.currentTime=0}catch(e){}}}; if(p) p.catch(()=>{fallbackStarted=true; state.activeLoops[kind]=synth(id,true);});}
 function stopLoop(kind){if(state.activeLoops[kind]){state.activeLoops[kind].stop();state.activeLoops[kind]=null;}}
-function runScenario(){haltRun(false); ensureAudio(); state.running=true; state.runStart=performance.now(); state.customerTerrified=false; state.lastRoom=-1; state.triggeredSensors.clear(); setMeter(0); scrollRoom(0); $('#houseRow').style.transition='none'; $('#houseRow').style.transform='translateX(0%)'; setTimeout(()=>$('#houseRow').style.transition='transform .45s cubic-bezier(.2,.8,.2,1)',40);
+function runScenario(mode='test'){haltRun(false); ensureAudio(); state.runMode=mode; state.running=true; state.runStart=performance.now(); state.lastFrame=state.runStart; state.timeAbove70=0; state.runEarned=0; state.activeSensorBoosts=[]; state.customerTerrified=false; state.lastRoom=-1; state.triggeredSensors.clear(); setMeter(0); scrollRoom(0); $('#houseRow').style.transition='none'; $('#houseRow').style.transform='translateX(0%)'; setTimeout(()=>$('#houseRow').style.transition='transform .45s cubic-bezier(.2,.8,.2,1)',40);
  let c=$('#customer'); if(!c){c=document.createElement('div'); c.id='customer'; c.className='customer fallback'; $('#houseRow').appendChild(c); const img=new Image(); img.onload=()=>{c.classList.remove('fallback'); c.style.backgroundImage="url('Assets/customer_1.png')"}; img.onerror=()=>c.classList.add('fallback'); img.src='Assets/customer_1.png';} c.style.display='block'; c.classList.remove('terrified'); c.style.backgroundImage=c.classList.contains('fallback')?'':"url('Assets/customer_1.png')"; animateRun();}
 function animateRun(){const duration=28000, row=$('#houseRow'), c=$('#customer'); const w=row.getBoundingClientRect().width; const progress=Math.min(1,(performance.now()-state.runStart)/duration); const x=progress*(w-230)-150; c.style.transform=`translateX(${x}px)`; const room=Math.max(0,Math.min(3,Math.floor(progress*4))); if(room!==state.lastRoom){state.lastRoom=room; const r=design[room]; if(r.music)startLoop('music',r.music); else stopLoop('music'); if(r.ambient)startLoop('ambient',r.ambient); else stopLoop('ambient'); scrollRoom(room);} evaluate(room,progress,x); if(progress<1&&state.running) state.runRAF=requestAnimationFrame(animateRun); else finishRun();}
-function evaluate(room,progress,x){const r=design[room]; let active=0, tick=0; if(r.music){active++;tick+=AUDIO_ASSET_DATABASE[r.music].scareValue*.015} if(r.ambient){active++;tick+=AUDIO_ASSET_DATABASE[r.ambient].scareValue*.015} const floor=document.querySelector(`.room-floor[data-room="${room}"]`); const frect=floor.getBoundingClientRect(), rowrect=$('#houseRow').getBoundingClientRect(); const localCustomerX=x-(room*rowrect.width/4)+105; r.sensors.forEach((s,idx)=>{const key=room+'-'+idx; if(!state.triggeredSensors.has(key)&&Math.abs(localCustomerX-(55+s.x))<33){state.triggeredSensors.add(key); tick+=AUDIO_ASSET_DATABASE[s.asset].scareValue*1.3; previewAudio(s.asset,false); const el=floor.querySelectorAll('.sensor')[idx]; if(el)el.classList.add('triggered'); setTimeout(()=>el&&el.classList.remove('triggered'),800);}}); active+=state.triggeredSensors.size?1:0; const mod=active>=3?1.6:active===2?1.3:1.0; setMeter(Math.min(100,state.anxiety+tick*mod)); if(state.anxiety>=75&&!state.customerTerrified){state.customerTerrified=true; const c=$('#customer'); c.classList.add('terrified'); if(!c.classList.contains('fallback')) c.style.backgroundImage="url('Assets/customer_2.png')";}}
+function evaluate(room,progress,x){
+ const now=performance.now();
+ const dt=Math.min(.12,Math.max(.001,(now-(state.lastFrame||now))/1000));
+ state.lastFrame=now;
+ const r=design[room];
+ let layers=0, baseScore=0;
+ if(r.music){layers++;baseScore+=AUDIO_ASSET_DATABASE[r.music].scareValue;}
+ if(r.ambient){layers++;baseScore+=AUDIO_ASSET_DATABASE[r.ambient].scareValue;}
+ const floor=document.querySelector(`.room-floor[data-room="${room}"]`);
+ const rowrect=$('#houseRow').getBoundingClientRect();
+ const localCustomerX=x-(room*rowrect.width/4)+105;
+ r.sensors.forEach((s,idx)=>{
+   const key=room+'-'+idx;
+   if(!state.triggeredSensors.has(key)&&Math.abs(localCustomerX-(55+s.x))<33){
+     state.triggeredSensors.add(key);
+     const scare=AUDIO_ASSET_DATABASE[s.asset].scareValue;
+     state.activeSensorBoosts.push({until:now+2600,value:scare*.9});
+     previewAudio(s.asset,false);
+     const el=floor.querySelectorAll('.sensor')[idx];
+     if(el)el.classList.add('triggered');
+     setTimeout(()=>el&&el.classList.remove('triggered'),800);
+   }
+ });
+ state.activeSensorBoosts=state.activeSensorBoosts.filter(b=>b.until>now);
+ const sensorBoost=state.activeSensorBoosts.reduce((a,b)=>a+b.value,0);
+ const layerModifier=layers>=2?1.25:layers===1?1.0:0;
+ // Target-based scoring: background layers create a ceiling, sensors add short spikes.
+ // This prevents the meter from climbing to 100% just because time passes.
+ let target=(baseScore*layerModifier*1.35)+sensorBoost;
+ if(layers>=2 && sensorBoost>0) target*=1.18;
+ target=Math.max(0,Math.min(100,target));
+ const speed=target>state.anxiety?.45:.32;
+ const next=state.anxiety+(target-state.anxiety)*Math.min(1,dt*speed);
+ setMeter(next);
+ if(state.anxiety>70){
+   state.timeAbove70+=dt;
+   state.runEarned=Math.floor(state.timeAbove70*3);
+ }
+ if(state.anxiety>=75&&!state.customerTerrified){
+   state.customerTerrified=true;
+   const c=$('#customer');
+   c.classList.add('terrified');
+   if(!c.classList.contains('fallback')) c.style.backgroundImage="url('Assets/customer_2.png')";
+ }
+}
 function setMeter(v){state.anxiety=Math.max(0,Math.min(100,v)); $('#meterFill').style.width=state.anxiety.toFixed(0)+'%'; $('#meterText').textContent=state.anxiety.toFixed(0)+'%';}
-function haltRun(reset=true){state.running=false; if(state.runRAF)cancelAnimationFrame(state.runRAF); stopLoop('music'); stopLoop('ambient'); const c=$('#customer'); if(c)c.style.display='none'; state.triggeredSensors.clear(); if(reset)setMeter(0);}
-function finishRun(){haltRun(false); const msg=state.anxiety>=85?'Excellent scare design: the customer reached peak anxiety.':state.anxiety>=55?'Solid layered design. To reach a higher evaluation, improve room coverage or add varied SFX triggers.':'The design is safe but underpowered. Add more layered audio and purposeful sensor pads to increase impact.'; showModal('Evaluation complete',`Final Anxiety Index: ${state.anxiety.toFixed(0)}%. ${msg}`);}
+function haltRun(reset=true){state.running=false; if(state.runRAF)cancelAnimationFrame(state.runRAF); stopLoop('music'); stopLoop('ambient'); const c=$('#customer'); if(c)c.style.display='none'; state.triggeredSensors.clear(); state.activeSensorBoosts=[]; state.timeAbove70=0; state.runEarned=0; if(reset)setMeter(0);}
+function finishRun(){
+ state.running=false;
+ if(state.runRAF)cancelAnimationFrame(state.runRAF);
+ stopLoop('music');
+ stopLoop('ambient');
+ const c=$('#customer');
+ if(c)c.style.display='none';
+ const finalAnxiety=state.anxiety;
+ const thresholdSeconds=state.timeAbove70;
+ if(state.phase<3 || state.runMode==='test'){
+   const msg=finalAnxiety>=70?'Strong test result. In Open mode, keeping customers above 70% will earn bonus money.':finalAnxiety>=45?'Good calibration test. Try improved layering or better sensor timing to push above 70%.':'This test is underpowered. Add layers and purposeful sensor pads before opening to customers.';
+   showModal('Test complete',`Final Anxiety Index: ${finalAnxiety.toFixed(0)}%. ${msg}`);
+ }else{
+   const basePay=Math.max(3,Math.round(finalAnxiety/25));
+   const bonusPay=Math.floor(thresholdSeconds*3);
+   const terrorBonus=finalAnxiety>=90?5:0;
+   const totalPay=basePay+bonusPay+terrorBonus;
+   state.cash+=totalPay;
+   updateStats();
+   const msg=finalAnxiety>=85?'Excellent scare design: the customer reached peak anxiety and generated strong bonus revenue.':finalAnxiety>=55?'Solid layered design. To reach a higher evaluation and earn more, keep customers above 70% anxiety for longer.':'The design is safe but underpowered. Add more layered audio and purposeful sensor pads to increase anxiety and future earnings.';
+   showModal('Customer run complete',`Final Anxiety Index: ${finalAnxiety.toFixed(0)}%. Time above 70%: ${thresholdSeconds.toFixed(1)} seconds. Earnings: £${totalPay} (£${basePay} base + £${bonusPay} anxiety bonus${terrorBonus?` + £${terrorBonus} terror bonus`:''}). New budget: £${state.cash}. ${msg}`);
+ }
+ state.activeSensorBoosts=[];
+ state.triggeredSensors.clear();
+ state.timeAbove70=0;
+ state.runEarned=0;
+}
 window.addEventListener('load',init);
 </script>
 </body>
