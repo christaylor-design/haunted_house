@@ -21,6 +21,7 @@ button,input,select{font:inherit}.app{display:flex;height:100vh;width:100vw}.sid
     <div class="brand"><div class="logo">🎧</div><div><h1>Haunted House:<br>Audio Designer & Resource Evaluator</h1><div class="sub">Single-file PWA • Vanilla JS • Classroom-ready</div></div></div>
     <div class="phaseBox"><div class="phaseTitle"><strong id="phaseName">Phase 1: Music Calibration</strong><span class="pill" id="phaseStep">1/4</span></div><p class="phaseText" id="phaseText">Place the free Scary Tune into each room's Music speaker slot. Earlier choices will stay active as you progress.</p></div>
     <div class="bank"><div class="stat"><span>Budget</span><b id="cash">£50</b></div><div class="stat"><span>Scare Potential</span><b id="potential">0</b></div></div>
+    <div class="phaseBox" id="customerPanel"><div class="phaseTitle"><strong id="customerName">Nervous Visitor</strong><span class="pill" id="customerDifficulty">Easy</span></div><p class="phaseText" id="customerText">Open Mode unlocks after Phase 3. Complete 3 customer runs to unlock the next customer type and better shop assets.</p></div>
     <div class="toolCard" id="sensorTool" draggable="true"><strong>👣 SENSOR PAD</strong><div class="phaseText">Used in Phase 3 and Live Mode to place trigger points on room floors. Max 4 per room.</div></div>
     <div class="tabs"><button class="tab active" data-tab="all">All</button><button class="tab" data-tab="music">Music</button><button class="tab" data-tab="ambient">Ambient</button><button class="tab" data-tab="sfx">SFX</button></div>
     <div class="assetList" id="assetList"></div>
@@ -41,21 +42,26 @@ button,input,select{font:inherit}.app{display:flex;height:100vh;width:100vw}.sid
 <script>
 'use strict';
 const AUDIO_ASSET_DATABASE={
- 'scary_tune':{name:'Scary Tune',category:'music',path:'Assets/Sounds/Music/scary_tune',ext:'.wav',cost:0,scareValue:10,purchased:true},
- 'into_death':{name:'Into Death',category:'music',path:'Assets/Sounds/Music/into_death',ext:'.mp3',cost:25,scareValue:22,purchased:false},
- 'chime':{name:'Chime Loop',category:'ambient',path:'Assets/Sounds/Ambient/chime',ext:'.wav',cost:0,scareValue:8,purchased:true},
- 'creepy_crying':{name:'Creepy Crying',category:'ambient',path:'Assets/Sounds/Ambient/creepy_crying',ext:'.wav',cost:30,scareValue:25,purchased:false},
- 'zombie':{name:'Zombie Groan',category:'sfx',path:'Assets/Sounds/SFX/zombie',ext:'.wav',cost:0,scareValue:12,purchased:true},
- 'scream':{name:'Female Scream',category:'sfx',path:'Assets/Sounds/SFX/female_scream',ext:'.wav',cost:40,scareValue:30,purchased:false}
+ 'scary_tune':{name:'Scary Tune',category:'music',path:'Assets/Sounds/Music/scary_tune',ext:'.wav',cost:0,scareValue:10,unlockTier:0,purchased:true},
+ 'into_death':{name:'Into Death',category:'music',path:'Assets/Sounds/Music/into_death',ext:'.mp3',cost:25,scareValue:22,unlockTier:1,purchased:false},
+ 'chime':{name:'Chime Loop',category:'ambient',path:'Assets/Sounds/Ambient/chime',ext:'.wav',cost:0,scareValue:8,unlockTier:0,purchased:true},
+ 'creepy_crying':{name:'Creepy Crying',category:'ambient',path:'Assets/Sounds/Ambient/creepy_crying',ext:'.wav',cost:30,scareValue:25,unlockTier:2,purchased:false},
+ 'zombie':{name:'Zombie Groan',category:'sfx',path:'Assets/Sounds/SFX/zombie',ext:'.wav',cost:0,scareValue:12,unlockTier:0,purchased:true},
+ 'scream':{name:'Female Scream',category:'sfx',path:'Assets/Sounds/SFX/female_scream',ext:'.wav',cost:40,scareValue:30,unlockTier:2,purchased:false}
 };
 const ROOMS=['01: ENTRANCE HALL','02: DREAD CORRIDOR','03: GALLERY OF SHADOWS','04: BASEMENT CRYPT'];
+const CUSTOMER_TIERS=[
+ {id:'visitor',name:'Nervous Visitor',difficulty:'Easy',resistance:1.00,payout:1.00,assetTier:0,requiredRuns:3,desc:'A first-time visitor who is easier to scare. Complete 3 customer runs to unlock the Teenage Customer.'},
+ {id:'teen',name:'Teenage Customer',difficulty:'Hard',resistance:0.78,payout:1.35,assetTier:1,requiredRuns:3,desc:'Harder to scare and worth more money. Complete 3 runs with this customer to unlock the Grown Man Customer.'},
+ {id:'adult',name:'Grown Man Customer',difficulty:'Very hard',resistance:0.58,payout:1.85,assetTier:2,requiredRuns:null,desc:'The toughest customer type. This unlocks the highest-value audio assets in the shop.'}
+];
 const PHASES=[
  {name:'Phase 1: Music Calibration',step:'1/4',text:"Place the free Scary Tune into each room's Music speaker slot. Earlier choices will stay active as you progress.",allow:{music:true,ambient:false,sfx:false},filter:['scary_tune'],run:'Test'},
  {name:'Phase 2: Ambient Calibration',step:'2/4',text:'Music locks but remains active. Add the free Chime Loop to Ambient speaker slots.',allow:{music:false,ambient:true,sfx:false},filter:['chime'],run:'Test'},
  {name:'Phase 3: SFX Calibration',step:'3/4',text:'Music and Ambient remain active. Place Sensor Pads linked to Zombie Groan on the floors.',allow:{music:false,ambient:false,sfx:true},filter:['zombie'],run:'Test'},
- {name:'Live Game Mode',step:'4/4',text:'The full house is unlocked. Earn money from customer runs, then buy premium sounds and optimise your audio layers.',allow:{music:true,ambient:true,sfx:true},filter:Object.keys(AUDIO_ASSET_DATABASE),run:'Open'}
+ {name:'Live Game Mode',step:'4/4',text:'The full house is unlocked. Open the attraction to earn money from customers. After 3 successful runs, tougher customers and higher-value audio assets unlock.',allow:{music:true,ambient:true,sfx:true},filter:Object.keys(AUDIO_ASSET_DATABASE),run:'Open'}
 ];
-let state={phase:0,cash:50,currentTab:'all',selectedAsset:null,selectedTool:null,currentRoom:0,running:false,runMode:'test',anxiety:0,runRAF:null,runStart:0,lastFrame:0,timeAbove70:0,runEarned:0,activeSensorBoosts:[],customerTerrified:false,activeLoops:{music:null,ambient:null},lastRoom:-1,triggeredSensors:new Set(),dragItem:null,ctx:null,master:null};
+let state={phase:0,cash:50,currentTab:'all',selectedAsset:null,selectedTool:null,currentRoom:0,running:false,runMode:'test',customerTier:0,customerRunsAtTier:0,anxiety:0,runRAF:null,runStart:0,lastFrame:0,timeAbove70:0,runEarned:0,activeSensorBoosts:[],customerTerrified:false,activeLoops:{music:null,ambient:null},lastRoom:-1,triggeredSensors:new Set(),dragItem:null,ctx:null,master:null};
 let design=ROOMS.map(()=>({music:null,ambient:null,sensors:[]}));
 const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
 function init(){buildRooms(); bindUI(); renderPhase(); renderAssets(); updateStats(); showToast('Welcome, audio designer. Start by selecting Scary Tune.');}
@@ -70,7 +76,28 @@ function bindUI(){ $$('.tab').forEach(b=>b.onclick=()=>{state.currentTab=b.datas
 function renderPhase(){const p=PHASES[state.phase]; $('#phaseName').textContent=p.name; $('#phaseStep').textContent=p.step; $('#phaseText').textContent=p.text; updateControls();
  $$('.speaker-slots').forEach(el=>{const kind=el.dataset.kind; const editable=p.allow[kind]; el.classList.toggle('editable',editable); el.classList.toggle('locked',!editable); el.classList.toggle('hiddenPhase',(kind==='music'&&state.phase<0)||(kind==='ambient'&&state.phase<1));});
  $$('.room-floor').forEach(el=>el.classList.toggle('open',p.allow.sfx)); updateAssignments(); updateSelections();}
+function currentCustomer(){return CUSTOMER_TIERS[state.customerTier]||CUSTOMER_TIERS[0];}
+function assetTierUnlocked(asset){return (asset.unlockTier||0)<=currentCustomer().assetTier;}
+function unlockRequirementText(asset){
+ const tier=asset.unlockTier||0;
+ if(tier===1)return 'Unlocks with Teenage Customer';
+ if(tier===2)return 'Unlocks with Grown Man Customer';
+ return 'Unlocked';
+}
+function updateCustomerPanel(){
+ const c=currentCustomer();
+ $('#customerName').textContent=c.name;
+ $('#customerDifficulty').textContent=c.difficulty;
+ if(state.phase<3){
+   $('#customerText').textContent='Open Mode unlocks after Phase 3. Complete 3 customer runs to unlock the next customer type and better shop assets.';
+ }else if(c.requiredRuns){
+   $('#customerText').textContent=`${c.desc} Progress: ${state.customerRunsAtTier}/${c.requiredRuns} customer runs completed.`;
+ }else{
+   $('#customerText').textContent=c.desc+' All customer types and asset tiers are now available.';
+ }
+}
 function updateControls(){
+ updateCustomerPanel();
  const live=state.phase>=3;
  $('#nextPhase').style.display=live?'none':'';
  $('#testBtn').style.display=live?'none':'';
@@ -78,10 +105,10 @@ function updateControls(){
  $('#closedBtn').style.display=live?'':'none';
 }
 function visibleAssetIds(){let allowed=PHASES[state.phase].filter; return allowed.filter(id=>state.currentTab==='all'||AUDIO_ASSET_DATABASE[id].category===state.currentTab);}
-function renderAssets(){const list=$('#assetList'); list.innerHTML=''; visibleAssetIds().forEach(id=>{const a=AUDIO_ASSET_DATABASE[id]; const card=document.createElement('div'); card.className='asset'+(a.purchased?'':' locked')+(state.selectedAsset===id?' selected':''); card.draggable=a.purchased; card.innerHTML=`<h3>${a.purchased?'🔊':'🔒'} ${a.name}</h3><div class="meta"><span class="pill">${a.category.toUpperCase()}</span><span>Scare +${a.scareValue}</span><span>${a.cost?`£${a.cost}`:'Free'}</span></div>${!a.purchased?`<button class="buy">Buy / Unlock</button>`:''}`;
- card.onclick=(e)=>{ if(e.target.classList.contains('buy')) return buyAsset(id); if(!a.purchased){buyAsset(id);return;} state.selectedAsset=state.selectedAsset===id?null:id; state.selectedTool=null; updateSelections();};
- card.addEventListener('dragstart',()=>{if(a.purchased) state.dragItem=id;}); card.addEventListener('dragend',()=>state.dragItem=null); list.appendChild(card);}); updateSelections();}
-function buyAsset(id){const a=AUDIO_ASSET_DATABASE[id]; if(a.purchased)return; if(state.cash<a.cost){showModal('Budget shortfall',`You need £${a.cost-state.cash} more to unlock ${a.name}. This is a resource constraint: choose lower-cost assets or improve your design with existing sounds first.`);return;} state.cash-=a.cost; a.purchased=true; showToast(`${a.name} unlocked for £${a.cost}.`); renderAssets(); updateStats();}
+function renderAssets(){const list=$('#assetList'); list.innerHTML=''; visibleAssetIds().forEach(id=>{const a=AUDIO_ASSET_DATABASE[id]; const tierOK=assetTierUnlocked(a); const locked=!a.purchased||!tierOK; const card=document.createElement('div'); card.className='asset'+(locked?' locked':'')+(state.selectedAsset===id?' selected':''); card.draggable=a.purchased&&tierOK; const lockText=!tierOK?unlockRequirementText(a):(!a.purchased?'Buy / Unlock':''); card.innerHTML=`<h3>${a.purchased&&tierOK?'🔊':'🔒'} ${a.name}</h3><div class="meta"><span class="pill">${a.category.toUpperCase()}</span><span>Scare +${a.scareValue}</span><span>${a.cost?`£${a.cost}`:'Free'}</span></div>${lockText?`<button class="buy">${lockText}</button>`:''}`;
+ card.onclick=(e)=>{ if(e.target.classList.contains('buy')) return buyAsset(id); if(!tierOK){showModal('Asset tier locked',`${a.name} unlocks when you reach the right customer level: ${unlockRequirementText(a)}.`);return;} if(!a.purchased){buyAsset(id);return;} state.selectedAsset=state.selectedAsset===id?null:id; state.selectedTool=null; updateSelections();};
+ card.addEventListener('dragstart',()=>{if(a.purchased&&tierOK) state.dragItem=id;}); card.addEventListener('dragend',()=>state.dragItem=null); list.appendChild(card);}); updateSelections();}
+function buyAsset(id){const a=AUDIO_ASSET_DATABASE[id]; if(!assetTierUnlocked(a)){showModal('Asset tier locked',`${a.name} is not available yet. ${unlockRequirementText(a)}.`);return;} if(a.purchased)return; if(state.cash<a.cost){showModal('Budget shortfall',`You need £${a.cost-state.cash} more to unlock ${a.name}. Earn money by opening to customers and keeping anxiety above 70%.`);return;} state.cash-=a.cost; a.purchased=true; showToast(`${a.name} unlocked for £${a.cost}.`); renderAssets(); updateStats();}
 function updateSelections(){ $$('.asset').forEach((c,i)=>c.classList.toggle('selected',visibleAssetIds()[i]===state.selectedAsset)); $('#sensorTool').classList.toggle('selected',state.selectedTool==='sensor');}
 function placeOnSlot(el){if(state.running)return; const p=PHASES[state.phase], kind=el.dataset.kind, room=+el.dataset.room; if(!p.allow[kind]){showModal('Slot locked',`${kind} is not editable in this phase, but any previous placement stays active.`);return;} const id=state.selectedAsset; if(!id){showToast('Select an audio asset first.');return;} const asset=AUDIO_ASSET_DATABASE[id]; if(asset.category!==kind){showModal('Category mismatch',`This slot expects ${kind}. ${asset.name} is ${asset.category}.`);return;} if(!asset.purchased){buyAsset(id);return;} design[room][kind]=id; previewAudio(id,false); updateAssignments(); updateStats(); showToast(`${asset.name} assigned to ${ROOMS[room]}.`);}
 function placeSensor(e,el){if(state.running)return; if(!PHASES[state.phase].allow.sfx){showModal('Floor sensors locked','Sensor placement unlocks in Phase 3 and stays available in Live Game Mode. Customer runs now pay out money, so stronger designs can fund better assets.');return;} const room=+el.dataset.room; if(design[room].sensors.length>=4){showModal('Sensor cap reached','Each room is limited to 4 sensor pads. Click an existing sensor pad to remove it, then place a new one with a different sound.');return;} let id=state.selectedAsset && AUDIO_ASSET_DATABASE[state.selectedAsset].category==='sfx'?state.selectedAsset:'zombie'; if(!AUDIO_ASSET_DATABASE[id].purchased){buyAsset(id);return;} const rect=el.getBoundingClientRect(); const x=Math.max(20,Math.min(rect.width-20,e.clientX-rect.left)); const y=Math.max(22,Math.min(rect.height-20,e.clientY-rect.top));
@@ -95,9 +122,9 @@ function removeSensor(room,idx){
  updateStats();
  if(removed) showToast(`${AUDIO_ASSET_DATABASE[removed.asset].name} sensor removed. You can now place a new pad.`);
 }
-function updateStats(){ $('#cash').textContent='£'+state.cash; const pot=design.reduce((sum,r)=>sum+(r.music?AUDIO_ASSET_DATABASE[r.music].scareValue:0)+(r.ambient?AUDIO_ASSET_DATABASE[r.ambient].scareValue:0)+r.sensors.reduce((a,s)=>a+AUDIO_ASSET_DATABASE[s.asset].scareValue,0),0); $('#potential').textContent=pot;}
+function updateStats(){ $('#cash').textContent='£'+state.cash; const pot=design.reduce((sum,r)=>sum+(r.music?AUDIO_ASSET_DATABASE[r.music].scareValue:0)+(r.ambient?AUDIO_ASSET_DATABASE[r.ambient].scareValue:0)+r.sensors.reduce((a,s)=>a+AUDIO_ASSET_DATABASE[s.asset].scareValue,0),0); $('#potential').textContent=pot; updateCustomerPanel();}
 function scrollRoom(n){state.currentRoom=Math.max(0,Math.min(3,n)); $('#houseRow').style.transform=`translateX(${-25*state.currentRoom}%)`;}
-function resetDesign(){haltRun(); design=ROOMS.map(()=>({music:null,ambient:null,sensors:[]})); state.phase=0; state.cash=50; Object.entries(AUDIO_ASSET_DATABASE).forEach(([id,a])=>{a.purchased=a.cost===0}); renderPhase(); renderAssets(); updateAssignments(); updateStats(); setMeter(0); scrollRoom(0); showToast('Design reset.');}
+function resetDesign(){haltRun(); design=ROOMS.map(()=>({music:null,ambient:null,sensors:[]})); state.phase=0; state.cash=50; state.customerTier=0; state.customerRunsAtTier=0; Object.entries(AUDIO_ASSET_DATABASE).forEach(([id,a])=>{a.purchased=a.cost===0}); renderPhase(); renderAssets(); updateAssignments(); updateStats(); setMeter(0); scrollRoom(0); showToast('Design reset.');}
 function showModal(t,m){$('#modalTitle').textContent=t; $('#modalMsg').textContent=m; $('#modalOverlay').style.display='grid';}
 function showToast(m){const t=$('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._timer); t._timer=setTimeout(()=>t.style.display='none',2600);}
 function ensureAudio(){if(!state.ctx){state.ctx=new (window.AudioContext||window.webkitAudioContext)(); state.master=state.ctx.createGain(); state.master.gain.value=.75; state.master.connect(state.ctx.destination);} if(state.ctx.state==='suspended')state.ctx.resume();}
@@ -139,6 +166,7 @@ function evaluate(room,progress,x){
  // This prevents the meter from climbing to 100% just because time passes.
  let target=(baseScore*layerModifier*1.35)+sensorBoost;
  if(layers>=2 && sensorBoost>0) target*=1.18;
+ target*=currentCustomer().resistance;
  target=Math.max(0,Math.min(100,target));
  const speed=target>state.anxiety?.45:.32;
  const next=state.anxiety+(target-state.anxiety)*Math.min(1,dt*speed);
@@ -169,14 +197,26 @@ function finishRun(){
    const msg=finalAnxiety>=70?'Strong test result. In Open mode, keeping customers above 70% will earn bonus money.':finalAnxiety>=45?'Good calibration test. Try improved layering or better sensor timing to push above 70%.':'This test is underpowered. Add layers and purposeful sensor pads before opening to customers.';
    showModal('Test complete',`Final Anxiety Index: ${finalAnxiety.toFixed(0)}%. ${msg}`);
  }else{
+   const customer=currentCustomer();
    const basePay=Math.max(3,Math.round(finalAnxiety/25));
    const bonusPay=Math.floor(thresholdSeconds*3);
    const terrorBonus=finalAnxiety>=90?5:0;
-   const totalPay=basePay+bonusPay+terrorBonus;
+   const totalPay=Math.max(1,Math.round((basePay+bonusPay+terrorBonus)*customer.payout));
    state.cash+=totalPay;
+   let unlockMsg='';
+   if(customer.requiredRuns){
+     state.customerRunsAtTier++;
+     if(state.customerRunsAtTier>=customer.requiredRuns && state.customerTier<CUSTOMER_TIERS.length-1){
+       state.customerTier++;
+       state.customerRunsAtTier=0;
+       unlockMsg=` New customer unlocked: ${currentCustomer().name}. New audio asset tier unlocked in the shop.`;
+     }
+   }
    updateStats();
+   renderAssets();
+   updateControls();
    const msg=finalAnxiety>=85?'Excellent scare design: the customer reached peak anxiety and generated strong bonus revenue.':finalAnxiety>=55?'Solid layered design. To reach a higher evaluation and earn more, keep customers above 70% anxiety for longer.':'The design is safe but underpowered. Add more layered audio and purposeful sensor pads to increase anxiety and future earnings.';
-   showModal('Customer run complete',`Final Anxiety Index: ${finalAnxiety.toFixed(0)}%. Time above 70%: ${thresholdSeconds.toFixed(1)} seconds. Earnings: £${totalPay} (£${basePay} base + £${bonusPay} anxiety bonus${terrorBonus?` + £${terrorBonus} terror bonus`:''}). New budget: £${state.cash}. ${msg}`);
+   showModal('Customer run complete',`${customer.name} completed the attraction. Final Anxiety Index: ${finalAnxiety.toFixed(0)}%. Time above 70%: ${thresholdSeconds.toFixed(1)} seconds. Earnings: £${totalPay} after customer difficulty multiplier. New budget: £${state.cash}.${unlockMsg} ${msg}`);
  }
  state.activeSensorBoosts=[];
  state.triggeredSensors.clear();
